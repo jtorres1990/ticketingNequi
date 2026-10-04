@@ -100,7 +100,10 @@ class MessagePolicyTest {
                         ProvisioningMessagePolicy.Action.REPAIR_AND_VERIFY),
                 Arguments.of(provisioning(true, true, ProvisioningStatus.PROVISIONING,
                         false, true, false, true, false, 3, false, false),
-                        ProvisioningMessagePolicy.Action.FAIL_AND_DELETE),
+                        ProvisioningMessagePolicy.Action.RETRY_WITH_BACKOFF),
+                Arguments.of(provisioning(true, true, ProvisioningStatus.PROVISIONING,
+                        false, true, false, true, false, 3, false, true),
+                        ProvisioningMessagePolicy.Action.FAIL_AND_DLQ),
                 Arguments.of(provisioning(true, true, ProvisioningStatus.PROVISIONING,
                         false, true, false, true, true, 3, false, false),
                         ProvisioningMessagePolicy.Action.ENABLE_AND_DELETE));

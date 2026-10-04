@@ -51,19 +51,6 @@ final class ApiAudits {
                 .build();
     }
 
-    static AuditRecord orderQuarantined(Order quarantined, String correlationId) {
-        return new AuditRecordBuilder()
-                .code(AuditCode.ORDER_QUARANTINED)
-                .event(quarantined.eventId())
-                .order(quarantined.orderId())
-                .tickets(quarantined.ticketIds())
-                .cause(quarantined.quarantineReason())
-                .actor(API_PROCESS)
-                .correlation(correlationId)
-                .occurredAt(quarantined.quarantinedAt())
-                .build();
-    }
-
     static AuditRecord eventProvisioningRequested(Event event, String adminSubject, String correlationId,
             Instant occurredAt) {
         return new AuditRecordBuilder()

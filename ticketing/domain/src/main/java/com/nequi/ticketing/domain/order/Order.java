@@ -91,10 +91,13 @@ public record Order(
         return copy(OrderStatus.REJECTED, FunctionalCause.PAYMENT_DECLINED, paymentAttempt, null, null, null);
     }
 
+    /**
+     * ST-009 (processing): a definitive technical failure, with or without a PaymentAttempt (ADR-029:
+     * "with reversal if there was a PaymentAttempt of unknown outcome").
+     */
     public Order failProcessing(Instant now) {
         requireActive();
-        requirePaymentAttempt();
-        return terminalWithPossibleReversal(OrderStatus.FAILED, FunctionalCause.PROCESSING_FAILED, now);
+        return terminalWithPossibleReversal(OrderStatus.FAILED, FunctionalCause.PROCESSING_FAILED, required(now, "now"));
     }
 
     public Order failEnqueue() {
@@ -122,8 +125,52 @@ public record Order(
         return copy(status, failureCause, paymentAttempt, required(now, "now"), required(reason, "reason"), reversalPlan);
     }
 
+    /**
+     * ADR-008 / ADR-025 (AP-032): an approval that arrives for an Order already closed without
+     * confirmation never reopens it; the reversal is marked unless it is already pending or completed.
+     */
+    public Order recordLateApproval(Instant now) {
+        if (status != OrderStatus.EXPIRED && status != OrderStatus.FAILED && status != OrderStatus.REJECTED) {
+            throw new InvalidStateTransitionException("a late approval applies only to an Order closed without confirmation");
+        }
+        requirePaymentAttempt();
+        if (reversalPlan != null) {
+            return this;
+        }
+        return copy(status, failureCause, paymentAttempt, quarantinedAt, quarantineReason,
+                ReversalPlan.request(paymentAttempt.paymentAttemptId(), required(now, "now")));
+    }
+
+    /** True when {@link #recordLateApproval(Instant)} marks a new reversal. */
+    public boolean lateApprovalMarksReversal() {
+        return reversalPlan == null;
+    }
+
+    /** AP-030 "complete": the provider confirmed the cancellation of the PaymentAttempt. */
+    public Order completeReversal(Instant now) {
+        return copy(status, failureCause, paymentAttempt, quarantinedAt, quarantineReason,
+                requireReversal().complete(now));
+    }
+
+    /** AP-030 "reschedule" or "exhaust": one more transient cancellation failure (ADR-025). */
+    public Order rescheduleReversal(Instant now) {
+        return copy(status, failureCause, paymentAttempt, quarantinedAt, quarantineReason,
+                requireReversal().reschedule(now));
+    }
+
+    public boolean reversalPending() {
+        return reversalPlan != null && reversalPlan.pending();
+    }
+
     public boolean activeLockHeld() {
         return status == OrderStatus.CREATED;
+    }
+
+    private ReversalPlan requireReversal() {
+        if (reversalPlan == null) {
+            throw new InvalidStateTransitionException("the Order has no payment reversal");
+        }
+        return reversalPlan;
     }
 
     private Order terminalWithPossibleReversal(OrderStatus target, FunctionalCause cause, Instant now) {

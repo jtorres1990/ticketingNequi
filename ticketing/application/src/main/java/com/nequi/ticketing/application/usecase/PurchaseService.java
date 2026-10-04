@@ -19,7 +19,6 @@ import com.nequi.ticketing.application.port.out.OrderReader;
 import com.nequi.ticketing.application.port.out.OrderRecord;
 import com.nequi.ticketing.application.port.out.PublishResult;
 import com.nequi.ticketing.application.port.out.PublisherAvailability;
-import com.nequi.ticketing.application.port.out.QuarantinePlan;
 import com.nequi.ticketing.application.port.out.ReservationPlan;
 import com.nequi.ticketing.application.port.out.TransactionOutcome;
 import com.nequi.ticketing.domain.event.Event;
@@ -47,7 +46,7 @@ import reactor.core.publisher.Mono;
  */
 public final class PurchaseService implements StartPurchaseUseCase {
 
-    static final String ENQUEUE_COMPENSATION_QUARANTINE_REASON = "TICKET_CONDITION_FAILED_ON_ENQUEUE_FAILURE";
+    static final String ENQUEUE_COMPENSATION_QUARANTINE_REASON = OrderQuarantine.ON_ENQUEUE_FAILURE;
 
     private final EventCatalog eventCatalog;
     private final OrderLifecycleStore lifecycleStore;
@@ -57,6 +56,7 @@ public final class PurchaseService implements StartPurchaseUseCase {
     private final Clock clock;
     private final IdGenerator idGenerator;
     private final ApiUseCaseSettings settings;
+    private final OrderQuarantine quarantine;
 
     public PurchaseService(
             EventCatalog eventCatalog,
@@ -75,6 +75,7 @@ public final class PurchaseService implements StartPurchaseUseCase {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.idGenerator = Objects.requireNonNull(idGenerator, "idGenerator");
         this.settings = Objects.requireNonNull(settings, "settings");
+        this.quarantine = new OrderQuarantine(lifecycleStore, clock);
     }
 
     @Override
@@ -259,11 +260,8 @@ public final class PurchaseService implements StartPurchaseUseCase {
     }
 
     private Mono<PurchaseResult> quarantine(OrderRecord current, String correlationId) {
-        Instant quarantinedAt = clock.now();
-        Order quarantined = current.order().quarantine(quarantinedAt, ENQUEUE_COMPENSATION_QUARANTINE_REASON);
-        QuarantinePlan plan = new QuarantinePlan(
-                current.order(), quarantined, ApiAudits.orderQuarantined(quarantined, correlationId));
-        return lifecycleStore.quarantine(plan)
+        return quarantine.apply(current.order(), ENQUEUE_COMPENSATION_QUARANTINE_REASON, ApiAudits.API_PROCESS,
+                        correlationId)
                 .onErrorReturn(TransactionOutcome.conflict())
                 .flatMap(outcome -> outcome instanceof TransactionOutcome.Applied
                         ? Mono.just(new PurchaseResult(OrderViews.of(current), false))

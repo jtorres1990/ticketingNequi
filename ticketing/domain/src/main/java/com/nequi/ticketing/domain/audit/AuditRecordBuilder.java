@@ -5,6 +5,7 @@ import com.nequi.ticketing.domain.audit.AuditRecord.AuditCode;
 import com.nequi.ticketing.domain.order.Order.OrderStatus;
 import com.nequi.ticketing.domain.ticket.Ticket.TicketState;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 
 public final class AuditRecordBuilder {
@@ -23,6 +24,10 @@ public final class AuditRecordBuilder {
     private String correlationId;
     private String paymentAttemptId;
     private Instant occurredAt;
+    private final List<AuditCode> includedCodes = new ArrayList<>();
+    private Integer capacity;
+    private Integer availableCount;
+    private Integer complimentaryCount;
 
     public AuditRecordBuilder code(AuditCode value) { this.code = value; return this; }
     public AuditRecordBuilder transitions(String... values) { this.transitionIds = List.of(values); return this; }
@@ -36,9 +41,17 @@ public final class AuditRecordBuilder {
     public AuditRecordBuilder correlation(String value) { this.correlationId = value; return this; }
     public AuditRecordBuilder paymentAttempt(String value) { this.paymentAttemptId = value; return this; }
     public AuditRecordBuilder occurredAt(Instant value) { this.occurredAt = value; return this; }
+    public AuditRecordBuilder include(AuditCode value) { this.includedCodes.add(value); return this; }
+    public AuditRecordBuilder inventoryCounts(int totalCapacity, int available, int complimentary) {
+        this.capacity = totalCapacity;
+        this.availableCount = available;
+        this.complimentaryCount = complimentary;
+        return this;
+    }
 
     public AuditRecord build() {
         return new AuditRecord(code, transitionIds, eventId, orderId, orderFrom, orderTo, ticketFrom,
-                ticketTo, ticketIds, cause, actor, correlationId, paymentAttemptId, occurredAt);
+                ticketTo, ticketIds, cause, actor, correlationId, paymentAttemptId, occurredAt,
+                includedCodes, capacity, availableCount, complimentaryCount);
     }
 }

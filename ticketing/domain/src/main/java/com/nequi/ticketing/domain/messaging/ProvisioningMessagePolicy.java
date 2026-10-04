@@ -7,6 +7,9 @@ import com.nequi.ticketing.domain.event.Event.ProvisioningStatus;
 /** Pure ordered decisions from ticketing.messaging.v2 section 5.2. */
 public final class ProvisioningMessagePolicy {
 
+    /** ADR-024: missing Tickets are rewritten and verified again up to three times. */
+    public static final int MAXIMUM_REPAIRS = 3;
+
     private ProvisioningMessagePolicy() {
     }
 
@@ -34,7 +37,11 @@ public final class ProvisioningMessagePolicy {
             return Action.WRITE_NEXT_BATCH;
         }
         if (!snapshot.inventoryVerified()) {
-            return snapshot.verificationAttempts() < 3 ? Action.REPAIR_AND_VERIFY : Action.FAIL_AND_DELETE;
+            if (snapshot.verificationAttempts() < MAXIMUM_REPAIRS) {
+                return Action.REPAIR_AND_VERIFY;
+            }
+            // ADR-024 section 3.9: a verification that keeps failing is a transient failure of the message.
+            return snapshot.lastReception() ? Action.FAIL_AND_DLQ : Action.RETRY_WITH_BACKOFF;
         }
         return Action.ENABLE_AND_DELETE;
     }
@@ -72,7 +79,6 @@ public final class ProvisioningMessagePolicy {
         REPAIR_AND_VERIFY,
         ENABLE_AND_DELETE,
         RETRY_WITH_BACKOFF,
-        FAIL_AND_DLQ,
-        FAIL_AND_DELETE
+        FAIL_AND_DLQ
     }
 }

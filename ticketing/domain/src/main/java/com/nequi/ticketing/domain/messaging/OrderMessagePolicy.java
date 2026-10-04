@@ -2,6 +2,7 @@ package com.nequi.ticketing.domain.messaging;
 
 import static com.nequi.ticketing.domain.shared.DomainChecks.required;
 
+import com.nequi.ticketing.domain.order.Order;
 import com.nequi.ticketing.domain.order.Order.OrderStatus;
 import java.time.Duration;
 import java.time.Instant;
@@ -29,7 +30,7 @@ public final class OrderMessagePolicy {
         }
         if (!snapshot.hasPaymentAttempt()) {
             Duration remaining = Duration.between(now, snapshot.expiresAt());
-            if (remaining.compareTo(Duration.ofSeconds(15)) <= 0) {
+            if (remaining.compareTo(Order.PAYMENT_CUTOFF) <= 0) {
                 return !snapshot.expiresAt().isAfter(now)
                         ? Action.EXPIRE_AND_DELETE
                         : Action.DELETE_WAIT_FOR_EXPIRATION;

@@ -160,7 +160,94 @@ class OrderStateMachineTest {
         assertThat(plan.exhausted()).isTrue();
         ReversalPlan exhausted = plan;
         assertThatThrownBy(() -> exhausted.reschedule(RESERVED_AT)).isInstanceOf(InvalidStateTransitionException.class);
+        assertThatThrownBy(() -> exhausted.complete(RESERVED_AT)).isInstanceOf(InvalidStateTransitionException.class);
         assertThatThrownBy(() -> ReversalPlan.delayAfter(10)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> ReversalPlan.delayAfter(-1)).isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("ADR-025 the reversal is due when marked and each transient failure applies the next backoff")
+    void reversalIsDueImmediatelyAndBacksOffAfterEachFailure() {
+        ReversalPlan requested = ReversalPlan.request("attempt", RESERVED_AT);
+        assertThat(requested.nextAttemptAt()).isEqualTo(RESERVED_AT);
+        assertThat(requested.dueAt(RESERVED_AT)).isTrue();
+        assertThat(requested.pending()).isTrue();
+
+        List<Duration> gaps = new java.util.ArrayList<>();
+        ReversalPlan plan = requested;
+        Instant now = RESERVED_AT;
+        for (int failure = 1; failure < ReversalPlan.MAXIMUM_ATTEMPTS; failure++) {
+            plan = plan.reschedule(now);
+            gaps.add(Duration.between(now, plan.nextAttemptAt()));
+            assertThat(plan.dueAt(plan.nextAttemptAt().minusMillis(1))).isFalse();
+            now = plan.nextAttemptAt();
+        }
+        assertThat(gaps).containsExactly(Duration.ofSeconds(10), Duration.ofSeconds(30), Duration.ofMinutes(1),
+                Duration.ofMinutes(2), Duration.ofMinutes(5), Duration.ofMinutes(10), Duration.ofMinutes(10),
+                Duration.ofMinutes(10), Duration.ofMinutes(10));
+        ReversalPlan exhausted = plan.reschedule(now);
+        assertThat(exhausted.exhausted()).isTrue();
+        assertThat(exhausted.attempts()).isEqualTo(ReversalPlan.MAXIMUM_ATTEMPTS);
+        assertThat(exhausted.dueAt(now.plus(Duration.ofDays(1)))).isFalse();
+        assertThat(exhausted.pending()).isTrue();
+
+        ReversalPlan completed = requested.complete(RESERVED_AT.plusSeconds(3));
+        assertThat(completed.pending()).isFalse();
+        assertThat(completed.completedAt()).isEqualTo(RESERVED_AT.plusSeconds(3));
+        assertThat(completed.dueAt(RESERVED_AT.plusSeconds(10))).isFalse();
+        assertThatThrownBy(() -> completed.reschedule(RESERVED_AT)).isInstanceOf(InvalidStateTransitionException.class);
+        assertThatThrownBy(() -> completed.complete(RESERVED_AT)).isInstanceOf(InvalidStateTransitionException.class);
+        assertThatThrownBy(() -> new ReversalPlan("attempt", 10, RESERVED_AT, RESERVED_AT, true, RESERVED_AT))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(new ReversalPlan("attempt", 3, RESERVED_AT, RESERVED_AT, false).pending()).isTrue();
+        assertThatThrownBy(() -> new ReversalPlan("attempt", 10, RESERVED_AT, RESERVED_AT, false))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ReversalPlan("attempt", -1, RESERVED_AT, RESERVED_AT, false))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("ADR-008 AC-025 a late approval never reopens the Order and marks the reversal only once")
+    void lateApprovalMarksReversalOnce() {
+        Order started = order().startPayment(RESERVED_AT);
+        Order rejected = started.recordPaymentOutcome(PaymentOutcome.DECLINED).reject();
+        assertThat(rejected.lateApprovalMarksReversal()).isTrue();
+
+        Order marked = rejected.recordLateApproval(RESERVED_AT.plusSeconds(5));
+        assertThat(marked.status()).isEqualTo(OrderStatus.REJECTED);
+        assertThat(marked.reversalPending()).isTrue();
+        assertThat(marked.reversalPlan().nextAttemptAt()).isEqualTo(RESERVED_AT.plusSeconds(5));
+        assertThat(marked.lateApprovalMarksReversal()).isFalse();
+        assertThat(marked.recordLateApproval(RESERVED_AT.plusSeconds(9))).isEqualTo(marked);
+
+        Order completed = marked.completeReversal(RESERVED_AT.plusSeconds(20));
+        assertThat(completed.reversalPending()).isFalse();
+        assertThat(completed.recordLateApproval(RESERVED_AT.plusSeconds(30))).isEqualTo(completed);
+        Order rescheduled = marked.rescheduleReversal(RESERVED_AT.plusSeconds(6));
+        assertThat(rescheduled.reversalPlan().attempts()).isEqualTo(1);
+
+        Order expired = started.expire(started.reservation().expiresAt());
+        assertThat(expired.recordLateApproval(RESERVED_AT)).isEqualTo(expired);
+        assertThatThrownBy(() -> order().recordLateApproval(RESERVED_AT))
+                .isInstanceOf(InvalidStateTransitionException.class);
+        assertThatThrownBy(() -> started.recordPaymentOutcome(PaymentOutcome.APPROVED)
+                .confirm(RESERVED_AT).recordLateApproval(RESERVED_AT))
+                .isInstanceOf(InvalidStateTransitionException.class);
+        assertThatThrownBy(() -> order().failEnqueue().recordLateApproval(RESERVED_AT))
+                .isInstanceOf(InvalidStateTransitionException.class);
+        assertThatThrownBy(() -> order().completeReversal(RESERVED_AT))
+                .isInstanceOf(InvalidStateTransitionException.class);
+        assertThat(order().reversalPending()).isFalse();
+    }
+
+    @Test
+    @DisplayName("ADR-029 a processing failure without PaymentAttempt closes the Order without reversal")
+    void processingFailureWithoutPaymentAttempt() {
+        Order failed = order().failProcessing(RESERVED_AT);
+
+        assertThat(failed.status()).isEqualTo(OrderStatus.FAILED);
+        assertThat(failed.failureCause()).isEqualTo(FunctionalCause.PROCESSING_FAILED);
+        assertThat(failed.reversalPlan()).isNull();
     }
 
     @Test

@@ -84,6 +84,49 @@ class DomainSupportTest {
         assertThat(record.code()).isEqualTo(AuditCode.PAYMENT_APPROVED);
         assertThat(record.transitionIds()).containsExactly("ST-004", "ST-007");
         assertThat(record.occurredAt()).isEqualTo(occurredAt);
+        assertThat(record.includedCodes()).isEmpty();
+        assertThat(record.capacity()).isNull();
+    }
+
+    @Test
+    @DisplayName("ADR-031 a transition record can include the reversal request and Event records carry inventory counts")
+    void auditRecordIncludesCausesAndInventoryCounts() {
+        Instant occurredAt = Instant.parse("2026-01-01T00:00:00Z");
+        Actor worker = new Actor(ActorType.WORKER, "worker-1");
+        AuditRecord expired = new AuditRecordBuilder()
+                .code(AuditCode.RESERVATION_EXPIRED)
+                .order("order")
+                .include(AuditCode.LATE_APPROVAL_NOT_APPLIED)
+                .include(AuditCode.PAYMENT_REVERSAL_REQUESTED)
+                .actor(worker)
+                .correlation("correlation")
+                .occurredAt(occurredAt)
+                .build();
+        AuditRecord enabled = new AuditRecordBuilder()
+                .code(AuditCode.EVENT_ENABLED)
+                .event("event")
+                .inventoryCounts(25, 24, 1)
+                .actor(worker)
+                .correlation("correlation")
+                .occurredAt(occurredAt)
+                .build();
+        AuditRecord legacy = new AuditRecord(AuditCode.ORDER_QUARANTINED, List.of(), null, "order", null, null,
+                null, null, List.of(), null, worker, "correlation", null, occurredAt);
+
+        assertThat(expired.records(AuditCode.PAYMENT_REVERSAL_REQUESTED)).isTrue();
+        assertThat(expired.records(AuditCode.RESERVATION_EXPIRED)).isTrue();
+        assertThat(expired.records(AuditCode.PAYMENT_APPROVED)).isFalse();
+        assertThat(enabled.capacity()).isEqualTo(25);
+        assertThat(enabled.availableCount()).isEqualTo(24);
+        assertThat(enabled.complimentaryCount()).isEqualTo(1);
+        assertThat(legacy.includedCodes()).isEmpty();
+        assertThat(new AuditRecord(AuditCode.EVENT_ENABLED, List.of(), "event", null, null, null, null, null, List.of(),
+                null, worker, "c", null, occurredAt, null, 25, 25, 0).includedCodes()).isEmpty();
+        assertThatThrownBy(() -> new AuditRecord(AuditCode.EVENT_ENABLED, List.of(), null, null, null, null, null, null,
+                List.of(), null, worker, "c", null, occurredAt)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AuditRecordBuilder().code(AuditCode.RESERVATION_EXPIRED).order("order")
+                .include(AuditCode.RESERVATION_EXPIRED).actor(worker).correlation("c").occurredAt(occurredAt).build())
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
