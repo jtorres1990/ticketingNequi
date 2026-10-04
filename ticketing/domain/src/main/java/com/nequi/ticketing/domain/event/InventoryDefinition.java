@@ -16,6 +16,59 @@ public record InventoryDefinition(List<Section> sections, List<ComplimentaryRang
         complimentaryRanges = List.copyOf(required(complimentaryRanges, "complimentaryRanges"));
     }
 
+    /** Section codes in definition order; usable as availability filter (ADR-040). */
+    public List<String> sectionCodes() {
+        return sections.stream().map(Section::code).toList();
+    }
+
+    public boolean definesSection(String sectionCode) {
+        return sectionCode != null && sections.stream().anyMatch(section -> section.code().equals(sectionCode));
+    }
+
+    /**
+     * BR-033: true when {@code ticketId} is {@code <section>-<row>-<seat>} for a seat of this definition.
+     * Used to reject unknown tickets before the reservation transaction (ADR-023).
+     */
+    public boolean containsTicket(String ticketId) {
+        if (ticketId == null) {
+            return false;
+        }
+        for (Section section : sections) {
+            String sectionPrefix = section.code() + "-";
+            if (!ticketId.startsWith(sectionPrefix)) {
+                continue;
+            }
+            String rowAndSeat = ticketId.substring(sectionPrefix.length());
+            for (Row row : section.rows()) {
+                String rowPrefix = row.label() + "-";
+                if (rowAndSeat.startsWith(rowPrefix)
+                        && isSeatOf(rowAndSeat.substring(rowPrefix.length()), row.seats())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Number of seats covered by complimentary ranges; exact once the definition is validated. */
+    public int complimentarySeatCount() {
+        return complimentaryRanges.stream().mapToInt(range -> range.toSeat() - range.fromSeat() + 1).sum();
+    }
+
+    private static boolean isSeatOf(String seatText, int seats) {
+        if (seatText.isEmpty() || seatText.length() > 4 || seatText.charAt(0) == '0') {
+            return false;
+        }
+        for (int index = 0; index < seatText.length(); index++) {
+            char digit = seatText.charAt(index);
+            if (digit < '0' || digit > '9') {
+                return false;
+            }
+        }
+        int seat = Integer.parseInt(seatText);
+        return seat >= 1 && seat <= seats;
+    }
+
     public ValidatedInventory validate(int declaredCapacity, InventoryLimits limits) {
         required(limits, "limits");
         if (declaredCapacity < 1 || declaredCapacity > limits.maximumCapacity()) {
