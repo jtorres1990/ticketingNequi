@@ -105,7 +105,7 @@ public final class OrderProcessingService implements ProcessOrderUseCase {
                 true, true, order.status(), order.quarantinedAt() != null, ticketConditionFailed,
                 order.paymentAttempt() != null, order.reservation().expiresAt(),
                 leaseOf(processing, record, now), payment.result(), processing.lastReception());
-        return switch (OrderMessagePolicy.decide(snapshot, now)) {
+        return switch (OrderMessagePolicy.decide(snapshot, now, settings.orderRules().paymentCutoff())) {
             case POISON_KEEP_WITH_SHORT_VISIBILITY -> Mono.just(MessageDisposition.poison(DispositionReason.ENTITY_NOT_FOUND));
             case DELETE_NOOP -> Mono.just(MessageDisposition.delete(DispositionReason.ALREADY_TERMINAL));
             case DELETE_QUARANTINED -> Mono.just(MessageDisposition.delete(DispositionReason.QUARANTINED));
@@ -173,11 +173,11 @@ public final class OrderProcessingService implements ProcessOrderUseCase {
 
     private Mono<MessageDisposition> startPayment(Processing processing, OrderRecord record, Payment payment,
             Instant now, int evaluations) {
-        Order started = record.order().startPayment(now);
+        Order started = record.order().startPayment(now, settings.orderRules().paymentCutoff());
         PaymentLease lease = new PaymentLease(processing.leaseOwner(), now.plus(settings.paymentLeaseDuration()));
         PaymentStartPlan plan = new PaymentStartPlan(record.order(), started, lease,
                 WorkerAudits.paymentStarted(started, actor, processing.correlationId(), now), now,
-                now.plus(Order.PAYMENT_CUTOFF));
+                now.plus(settings.orderRules().paymentCutoff()));
         return lifecycleStore.startPayment(plan).flatMap(outcome -> switch (outcome) {
             case TransactionOutcome.Applied applied -> decide(processing,
                     new OrderRecord(started, record.createdAt(), now, record.enqueuedAt(), lease),

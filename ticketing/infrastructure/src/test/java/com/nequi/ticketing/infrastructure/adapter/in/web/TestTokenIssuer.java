@@ -34,17 +34,17 @@ import reactor.netty.http.server.HttpServer;
  * {@code cognito:groups}, {@code token_use}, {@code client_id}, {@code iss}, {@code exp}, {@code iat}; no
  * audience. The five deterministic identities of ADR-033 are available as constants.
  */
-final class TestTokenIssuer implements AutoCloseable {
+public final class TestTokenIssuer implements AutoCloseable {
 
-    static final String ISSUER = "https://cognito-idp.local.test/ticketing-pool";
-    static final String CLIENT_ID = "ticketing-web-client";
+    public static final String ISSUER = "https://cognito-idp.local.test/ticketing-pool";
+    public static final String CLIENT_ID = "ticketing-web-client";
     static final String OTHER_CLIENT_ID = "unknown-client";
 
-    static final Identity ADMIN = new Identity("admin", List.of("ADMIN"));
-    static final Identity CUSTOMER_A = new Identity("customer-a", List.of("CUSTOMER"));
-    static final Identity CUSTOMER_B = new Identity("customer-b", List.of("CUSTOMER"));
-    static final Identity ADMIN_CUSTOMER = new Identity("admin-customer", List.of("ADMIN", "CUSTOMER"));
-    static final Identity NO_GROUPS = new Identity("no-groups", List.of("viewer"));
+    public static final Identity ADMIN = new Identity("admin", List.of("ADMIN"));
+    public static final Identity CUSTOMER_A = new Identity("customer-a", List.of("CUSTOMER"));
+    public static final Identity CUSTOMER_B = new Identity("customer-b", List.of("CUSTOMER"));
+    public static final Identity ADMIN_CUSTOMER = new Identity("admin-customer", List.of("ADMIN", "CUSTOMER"));
+    public static final Identity NO_GROUPS = new Identity("no-groups", List.of("viewer"));
 
     private final RSAKey signingKey;
     private final RSAKey foreignKey;
@@ -65,15 +65,15 @@ final class TestTokenIssuer implements AutoCloseable {
                 .bindNow();
     }
 
-    static TestTokenIssuer start(Instant now) {
+    public static TestTokenIssuer start(Instant now) {
         return new TestTokenIssuer(now);
     }
 
-    String jwkSetUri() {
+    public String jwkSetUri() {
         return "http://127.0.0.1:" + jwksServer.port() + "/.well-known/jwks.json";
     }
 
-    String token(Identity identity) {
+    public String token(Identity identity) {
         return sign(claims(identity), signingKey);
     }
 
@@ -155,6 +155,6 @@ final class TestTokenIssuer implements AutoCloseable {
         }
     }
 
-    record Identity(String subject, List<String> groups) {
+    public record Identity(String subject, List<String> groups) {
     }
 }

@@ -53,6 +53,7 @@ final class PeriodicTrigger {
     private final Scheduler scheduler;
     private final SchedulerEvents events;
     private final RandomGenerator random;
+    private final int shardCount;
 
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicReference<Disposable> timer = new AtomicReference<>(Disposables.disposed());
@@ -62,9 +63,14 @@ final class PeriodicTrigger {
     private volatile boolean busy;
     private volatile int consecutiveFailures;
 
-    PeriodicTrigger(PeriodicProcess process, PeriodicProcessSettings settings,
+    /** {@code shardCount}: shards of the index visited by one cycle, from the configured sharding (IV-015). */
+    PeriodicTrigger(PeriodicProcess process, int shardCount, PeriodicProcessSettings settings,
             Function<CycleRequest, Mono<CycleResult>> cycle, BooleanSupplier paused, Scheduler scheduler,
             SchedulerEvents events, RandomGenerator random) {
+        if (shardCount < 0) {
+            throw new IllegalArgumentException("shardCount cannot be negative");
+        }
+        this.shardCount = shardCount;
         this.process = Objects.requireNonNull(process, "process");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.cycle = Objects.requireNonNull(cycle, "cycle");
@@ -186,8 +192,8 @@ final class PeriodicTrigger {
 
     /** A random permutation of the shards of the process (Fisher-Yates); empty for a process without shards. */
     private List<Integer> shardOrder() {
-        List<Integer> shards = new ArrayList<>(process.shardCount());
-        for (int shard = 0; shard < process.shardCount(); shard++) {
+        List<Integer> shards = new ArrayList<>(shardCount);
+        for (int shard = 0; shard < shardCount; shard++) {
             shards.add(shard);
         }
         for (int index = shards.size() - 1; index > 0; index--) {

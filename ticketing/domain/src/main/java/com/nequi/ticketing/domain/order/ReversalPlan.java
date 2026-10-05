@@ -5,14 +5,13 @@ import static com.nequi.ticketing.domain.shared.DomainChecks.required;
 import com.nequi.ticketing.domain.error.InvalidStateTransitionException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
 
 /**
  * Payment reversal mark of a terminal Order (FG-003, ADR-025). It is requested by the closing
- * transition, attempted by the reversal process, rescheduled after each transient failure with the
- * backoff 10 s, 30 s, 1 min, 2 min, 5 min and then every 10 min, exhausted after ten failed attempts
- * and completed once the provider confirms the cancellation. It is a technical attribute, never a
- * business state.
+ * transition, attempted by the reversal process, rescheduled after each transient failure following the
+ * configurable {@link ReversalSchedule} (approved: 10 s, 30 s, 1 min, 2 min, 5 min and then every 10 min,
+ * exhausted after ten failed attempts; IV-015) and completed once the provider confirms the cancellation.
+ * It is a technical attribute, never a business state.
  */
 public record ReversalPlan(
         String paymentAttemptId,
@@ -22,16 +21,15 @@ public record ReversalPlan(
         boolean exhausted,
         Instant completedAt) {
 
-    public static final int MAXIMUM_ATTEMPTS = 10;
-    private static final List<Duration> DELAYS = List.of(
-            Duration.ofSeconds(10), Duration.ofSeconds(30), Duration.ofMinutes(1),
-            Duration.ofMinutes(2), Duration.ofMinutes(5));
+    /** Approved maximum of attempts ({@link ReversalSchedule#DEPLOYED}). */
+    public static final int MAXIMUM_ATTEMPTS = ReversalSchedule.DEPLOYED.maximumAttempts();
 
     public ReversalPlan {
         paymentAttemptId = required(paymentAttemptId, "paymentAttemptId");
         requestedAt = required(requestedAt, "requestedAt");
         nextAttemptAt = required(nextAttemptAt, "nextAttemptAt");
-        if (attempts < 0 || attempts > MAXIMUM_ATTEMPTS || exhausted != (attempts == MAXIMUM_ATTEMPTS)) {
+        // The maximum of attempts is configurable (IV-015): the stored mark tells whether it was exhausted.
+        if (attempts < 0 || (exhausted && attempts < 1)) {
             throw new IllegalArgumentException("invalid reversal attempt state");
         }
         if (completedAt != null && exhausted) {
@@ -50,19 +48,26 @@ public record ReversalPlan(
         return new ReversalPlan(paymentAttemptId, 0, requested, requested, false, null);
     }
 
-    /**
-     * Records one more transient failure: the next attempt follows the ADR-025 backoff (the first
-     * failure waits 10 s); the tenth failure exhausts the reversal for manual review.
-     */
+    /** {@link #reschedule(Instant, ReversalSchedule)} with the approved schedule. */
     public ReversalPlan reschedule(Instant now) {
+        return reschedule(now, ReversalSchedule.DEPLOYED);
+    }
+
+    /**
+     * Records one more transient failure: the next attempt follows the schedule (approved: the first
+     * failure waits 10 s); the failure that reaches its maximum of attempts exhausts the reversal for
+     * manual review.
+     */
+    public ReversalPlan reschedule(Instant now, ReversalSchedule schedule) {
+        required(schedule, "reversalSchedule");
         requirePending();
         if (exhausted) {
             throw new InvalidStateTransitionException("an exhausted reversal cannot be rescheduled");
         }
         int nextAttempts = attempts + 1;
-        boolean nextExhausted = nextAttempts == MAXIMUM_ATTEMPTS;
+        boolean nextExhausted = nextAttempts >= schedule.maximumAttempts();
         Instant current = required(now, "now");
-        Instant next = nextExhausted ? current : current.plus(delayAfter(nextAttempts - 1));
+        Instant next = nextExhausted ? current : current.plus(schedule.delayAfter(nextAttempts - 1));
         return new ReversalPlan(paymentAttemptId, nextAttempts, requestedAt, next, nextExhausted, null);
     }
 
@@ -86,12 +91,9 @@ public record ReversalPlan(
         return pending() && !exhausted && !nextAttemptAt.isAfter(required(now, "now"));
     }
 
-    /** Backoff after the (index + 1)-th transient failure: index 0 is the first failure (10 s). */
+    /** Approved backoff after the (index + 1)-th transient failure: index 0 is the first failure (10 s). */
     public static Duration delayAfter(int failureIndex) {
-        if (failureIndex < 0 || failureIndex >= MAXIMUM_ATTEMPTS) {
-            throw new IllegalArgumentException("failureIndex must be between 0 and 9");
-        }
-        return failureIndex < DELAYS.size() ? DELAYS.get(failureIndex) : Duration.ofMinutes(10);
+        return ReversalSchedule.DEPLOYED.delayAfter(failureIndex);
     }
 
     private void requirePending() {

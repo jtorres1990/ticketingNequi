@@ -94,7 +94,8 @@ public final class EventManagementService implements CreateEventUseCase, GetEven
                 command.capacity(),
                 command.inventory(),
                 now,
-                settings.inventoryLimits());
+                settings.inventoryLimits(),
+                settings.sharding());
         int complimentary = event.inventoryDefinition().complimentarySeatCount();
         int totalBatches = Math.ceilDiv(event.capacity(), settings.inventoryLimits().provisioningBatchSize());
         IdempotencyRecord idempotency = new IdempotencyRecord(

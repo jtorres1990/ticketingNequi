@@ -200,7 +200,10 @@ class OrderStateMachineTest {
         assertThatThrownBy(() -> new ReversalPlan("attempt", 10, RESERVED_AT, RESERVED_AT, true, RESERVED_AT))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThat(new ReversalPlan("attempt", 3, RESERVED_AT, RESERVED_AT, false).pending()).isTrue();
-        assertThatThrownBy(() -> new ReversalPlan("attempt", 10, RESERVED_AT, RESERVED_AT, false))
+        // IV-015: the maximum of attempts is configurable, so a non-exhausted mark may hold any count; an exhausted
+        // mark needs at least one failed attempt.
+        assertThat(new ReversalPlan("attempt", 10, RESERVED_AT, RESERVED_AT, false).pending()).isTrue();
+        assertThatThrownBy(() -> new ReversalPlan("attempt", 0, RESERVED_AT, RESERVED_AT, true))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ReversalPlan("attempt", -1, RESERVED_AT, RESERVED_AT, false))
                 .isInstanceOf(IllegalArgumentException.class);

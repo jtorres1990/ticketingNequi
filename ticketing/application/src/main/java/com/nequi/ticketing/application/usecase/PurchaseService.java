@@ -82,7 +82,8 @@ public final class PurchaseService implements StartPurchaseUseCase {
     public Mono<PurchaseResult> startPurchase(StartPurchaseCommand command) {
         return Mono.defer(() -> {
             Objects.requireNonNull(command, "command");
-            PurchaseRequest request = new PurchaseRequest(command.eventId(), command.ticketIds(), command.idempotencyKey());
+            PurchaseRequest request = PurchaseRequest.of(command.eventId(), command.ticketIds(), command.idempotencyKey(),
+                    settings.orderRules());
             String customerId = DomainChecks.required(command.customerId(), "customerId");
             String correlationId = Objects.requireNonNull(command.correlationId(), "correlationId");
             Attempt attempt = new Attempt(customerId, request, ContentHash.purchase(request), correlationId);

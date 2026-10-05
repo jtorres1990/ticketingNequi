@@ -423,7 +423,7 @@ abstract class PersistencePortContract {
     void markEnqueued() {
         Event event = enabledEvent(DEFINITION, NOW.plus(Duration.ofDays(10)));
         Order order = reserve(event, newOrder(event, customer(), "A-1-5"));
-        int shard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.PENDING_ENQUEUE_SHARDS);
+        int shard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.DEPLOYED.pendingEnqueueShards());
 
         eventually(() -> assertThat(collect(ports.orders().findPendingEnqueue(shard, NOW.plusSeconds(31))))
                 .contains(order.orderId()));
@@ -471,8 +471,8 @@ abstract class PersistencePortContract {
         Order order = reserve(event, newOrder(event, customer, "A-1-8"));
         Order quarantined = order.quarantine(NOW.plusSeconds(4), "TICKET_CONDITION_FAILED_ON_EXPIRATION");
         QuarantinePlan plan = new QuarantinePlan(order, quarantined, audit(AuditCode.ORDER_QUARANTINED, order, NOW.plusSeconds(4)));
-        int reservationShard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.RESERVATION_SHARDS);
-        int pendingShard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.PENDING_ENQUEUE_SHARDS);
+        int reservationShard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.DEPLOYED.reservationShards());
+        int pendingShard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.DEPLOYED.pendingEnqueueShards());
         Instant afterExpiry = order.reservation().expiresAt().plusSeconds(1);
 
         eventually(() -> assertThat(collect(ports.orders().findDueReservations(reservationShard, afterExpiry)))
@@ -549,7 +549,7 @@ abstract class PersistencePortContract {
         assertThat(record.paymentLease()).isNull();
         assertThat(started.ticketIds()).allSatisfy(id -> assertThat(ticketState(event.eventId(), id)).contains(TicketState.SOLD));
         assertThat(activeLock(customer, event.eventId())).isEmpty();
-        int shard = ShardingPolicy.shard(started.orderId(), ShardingPolicy.RESERVATION_SHARDS);
+        int shard = ShardingPolicy.shard(started.orderId(), ShardingPolicy.DEPLOYED.reservationShards());
         eventually(() -> assertThat(collect(ports.orders().findDueReservations(shard, expiry.plusSeconds(1))))
                 .doesNotContain(started.orderId()));
         assertThat(failedItems(value(ports.lifecycle().confirm(plan)))).contains(FailedItem.ORDER, FailedItem.TICKET_STATE);
@@ -587,7 +587,7 @@ abstract class PersistencePortContract {
         OrderRecord record = value(ports.orders().findById(started.orderId()));
         assertThat(record.order()).isEqualTo(failed);
         assertThat(record.order().reversalPending()).isTrue();
-        int shard = ShardingPolicy.shard(started.orderId(), ShardingPolicy.REVERSAL_SHARDS);
+        int shard = ShardingPolicy.shard(started.orderId(), ShardingPolicy.DEPLOYED.reversalShards());
         eventually(() -> assertThat(collect(ports.orders().findDueReversals(shard, NOW.plusSeconds(9))))
                 .contains(started.orderId()));
         assertThat(collect(ports.orders().findDueReversals(shard, NOW.plusSeconds(8)))).doesNotContain(started.orderId());
@@ -615,7 +615,7 @@ abstract class PersistencePortContract {
         String customer = customer();
         Order order = reserve(event, newOrder(event, customer, "B-1-1", "B-1-2"));
         Instant expiry = order.reservation().expiresAt();
-        int shard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.RESERVATION_SHARDS);
+        int shard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.DEPLOYED.reservationShards());
         Order expired = order.expire(expiry);
         ClosurePlan early = new ClosurePlan(ClosurePlan.Kind.EXPIRE, order, expired, null,
                 audit(AuditCode.RESERVATION_EXPIRED, expired, expiry.minusMillis(1)), expiry.minusMillis(1));
@@ -692,7 +692,7 @@ abstract class PersistencePortContract {
     void reversals() {
         Event event = enabledEvent(DEFINITION, NOW.plus(Duration.ofDays(10)));
         Order failed = failedWithReversal(event, "A-2-1");
-        int shard = ShardingPolicy.shard(failed.orderId(), ShardingPolicy.REVERSAL_SHARDS);
+        int shard = ShardingPolicy.shard(failed.orderId(), ShardingPolicy.DEPLOYED.reversalShards());
 
         Order rescheduled = failed.rescheduleReversal(NOW.plusSeconds(10));
         assertThat(value(ports.lifecycle().rescheduleReversal(failed.orderId(), 1, rescheduled.reversalPlan()))).isFalse();
@@ -724,7 +724,7 @@ abstract class PersistencePortContract {
         Order stored = value(ports.orders().findById(other.orderId())).order();
         assertThat(stored.reversalPlan().exhausted()).isTrue();
         assertThat(stored.reversalPending()).isTrue();
-        int otherShard = ShardingPolicy.shard(other.orderId(), ShardingPolicy.REVERSAL_SHARDS);
+        int otherShard = ShardingPolicy.shard(other.orderId(), ShardingPolicy.DEPLOYED.reversalShards());
         eventually(() -> assertThat(collect(ports.orders().findDueReversals(otherShard, NOW.plus(Duration.ofDays(1)))))
                 .doesNotContain(other.orderId()));
         assertThat(value(ports.lifecycle().rescheduleReversal("missing-" + UUID.randomUUID(), 0, rescheduled.reversalPlan())))

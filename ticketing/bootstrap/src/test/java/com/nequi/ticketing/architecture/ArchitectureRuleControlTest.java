@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nequi.ticketing.architecture.fixture.domain.ForbiddenBlockingFixture;
 import com.nequi.ticketing.architecture.fixture.domain.ForbiddenDomainFixture;
+import com.nequi.ticketing.architecture.fixture.infrastructure.adapter.in.web.ForbiddenDefaultRulesFixture;
 import com.nequi.ticketing.architecture.fixture.infrastructure.adapter.in.scheduler.ForbiddenSchedulerFixture;
 import com.nequi.ticketing.architecture.fixture.infrastructure.adapter.out.payment.ForbiddenPaymentFixture;
 import com.nequi.ticketing.architecture.fixture.infrastructure.adapter.out.sqs.ForbiddenRateLimiterFixture;
@@ -56,6 +57,17 @@ class ArchitectureRuleControlTest {
         assertThatThrownBy(() -> ArchitectureRules.periodicSchedulerTriggersOnlyInboundPorts().check(fixture))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("ManagedCircuitBreaker");
+    }
+
+    @Test
+    @DisplayName("IV-012 IV-015 control detects production code that uses an approved-default shortcut of the domain")
+    void configuredRulesControlDetectsAShortcut() {
+        var fixture = new ClassFileImporter().importClasses(ForbiddenDefaultRulesFixture.class);
+
+        assertThatThrownBy(() -> ArchitectureRules.configuredRulesAreUsedOutsideTheDomain().check(fixture))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("Order.startPayment(java.time.Instant)")
+                .hasMessageContaining("PurchaseRequest.<init>");
     }
 
     @Test

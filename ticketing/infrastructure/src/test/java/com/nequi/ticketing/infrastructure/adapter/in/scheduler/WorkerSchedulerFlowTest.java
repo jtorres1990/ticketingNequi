@@ -270,7 +270,7 @@ class WorkerSchedulerFlowTest {
     }
 
     private PeriodicTrigger trigger(PeriodicProcess process, Function<CycleRequest, Mono<CycleResult>> cycle) {
-        PeriodicTrigger trigger = new PeriodicTrigger(process, WorkerSchedulerSettings.DEPLOYED.of(process), cycle,
+        PeriodicTrigger trigger = new PeriodicTrigger(process, process.shardCount(), WorkerSchedulerSettings.DEPLOYED.of(process), cycle,
                 () -> false, scheduler, events, new FixedRandom(0));
         triggers.add(trigger);
         return trigger;

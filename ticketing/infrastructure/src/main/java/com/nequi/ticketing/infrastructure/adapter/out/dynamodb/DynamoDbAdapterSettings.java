@@ -1,5 +1,6 @@
 package com.nequi.ticketing.infrastructure.adapter.out.dynamodb;
 
+import com.nequi.ticketing.domain.event.ShardingPolicy;
 import java.time.Duration;
 import java.util.Objects;
 
@@ -13,10 +14,12 @@ import java.util.Objects;
  *   <li>unprocessed items or keys of a batch: retried with bounded backoff (ADR-039);</li>
  *   <li>sold-out probe: waves of 4 shards (data model §4, ADR-040);</li>
  *   <li>count: all shards of the Event in parallel, {@code 0} meaning "all" (IV-004);</li>
- *   <li>cache of {@code ENABLED} Events: 10,000 entries without expiry (IV-004).</li>
+ *   <li>cache of {@code ENABLED} Events: 10,000 entries without expiry (IV-004);</li>
+ *   <li>sharding of the {@code RESV#}, {@code REVERSAL#} and {@code PENDQ#} index keys (ADR-022, IV-015), the
+ *       same policy as the use cases.</li>
  * </ul>
  * The values without an approved figure (unprocessed retries and their backoff, batch read parallelism)
- * are implementation guards reported for human review in the INC-005 report.
+ * were approved as configurable guards in IV-017; the bootstrap module binds every value (INC-010).
  */
 public record DynamoDbAdapterSettings(
         String tableName,
@@ -33,10 +36,12 @@ public record DynamoDbAdapterSettings(
         Duration unprocessedBackoffMaximum,
         int probeWaveSize,
         int countConcurrency,
-        long enabledEventCacheSize) {
+        long enabledEventCacheSize,
+        ShardingPolicy sharding) {
 
     public DynamoDbAdapterSettings {
         Objects.requireNonNull(tableName, "tableName");
+        Objects.requireNonNull(sharding, "sharding");
         Objects.requireNonNull(conflictBackoffBase, "conflictBackoffBase");
         Objects.requireNonNull(conflictBackoffMaximum, "conflictBackoffMaximum");
         Objects.requireNonNull(unprocessedBackoffBase, "unprocessedBackoffBase");
@@ -64,6 +69,6 @@ public record DynamoDbAdapterSettings(
 
     public static DynamoDbAdapterSettings deployed(String tableName) {
         return new DynamoDbAdapterSettings(tableName, 2, Duration.ofMillis(25), Duration.ofMillis(200), 0.5,
-                25, 4, 100, 4, 5, Duration.ofMillis(50), Duration.ofSeconds(1), 4, 0, 10_000);
+                25, 4, 100, 4, 5, Duration.ofMillis(50), Duration.ofSeconds(1), 4, 0, 10_000, ShardingPolicy.DEPLOYED);
     }
 }

@@ -1,0 +1,89 @@
+# Ticketing (CMP-021). Only framework settings and the environment variables of the connection values live here:
+# every tuning value of the ADRs defaults to the approved value of its settings record (plan Annex A) and can be
+# overridden with its ticketing.* property (environment: TICKETING_<GROUP>_<PROPERTY> by relaxed binding).
+# No secret is versioned: the Payment Mock API key and the AWS credentials come from the environment only (ADR-032).
+
+spring:
+  application:
+    name: ticketing
+  main:
+    banner-mode: off
+  lifecycle:
+    # Ordered shutdown (ADR-037, IV-004): longer than the publication budget (2 s) and the processing cap (30 s).
+    timeout-per-shutdown-phase: 35s
+  reactor:
+    # Restores the trace context of the HTTP observation in the reactive operators (logs with traceId/spanId).
+    context-propagation: auto
+  webflux:
+    problemdetails:
+      enabled: false
+
+server:
+  port: ${TICKETING_SERVER_PORT:8080}
+  shutdown: graceful
+
+management:
+  server:
+    # Internal management port, not registered in the load balancer (ADR-032, ADR-037).
+    port: ${TICKETING_MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+        # Liveness and readiness groups also on the application port: /livez and /readyz (ADR-037 health).
+        add-additional-paths: true
+  # IV-007: OTLP export of traces configurable and disabled by default; metrics only through Prometheus.
+  tracing:
+    export:
+      otlp:
+        enabled: ${TICKETING_TRACING_EXPORT_ENABLED:false}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${TICKETING_TRACING_OTLP_ENDPOINT:}
+  otlp:
+    metrics:
+      export:
+        enabled: false
+  logging:
+    export:
+      otlp:
+        enabled: false
+
+logging:
+  structured:
+    # IV-007: structured JSON logs of Spring Boot (Elastic Common Schema) on the console.
+    format:
+      console: ${TICKETING_LOG_FORMAT:ecs}
+  level:
+    # Expected timeouts and connection closes of the Payment Mock are reported by the adapter hook (INC-007 §6.1.11).
+    reactor.netty.http.client: ERROR
+    # Never DEBUG: it would log authorization headers (ADR-032, INC-008).
+    org.springframework.security: INFO
+
+ticketing:
+  role: ${TICKETING_ROLE:}
+  aws:
+    region: ${AWS_REGION:}
+  dynamodb:
+    endpoint: ${TICKETING_DYNAMODB_ENDPOINT:}
+    table-name: ${TICKETING_DYNAMODB_TABLE:}
+  sqs:
+    endpoint: ${TICKETING_SQS_ENDPOINT:}
+    orders-queue-url: ${TICKETING_SQS_ORDERS_QUEUE_URL:}
+    provisioning-queue-url: ${TICKETING_SQS_PROVISIONING_QUEUE_URL:}
+  payment:
+    base-url: ${TICKETING_PAYMENT_BASE_URL:}
+    api-key: ${TICKETING_PAYMENT_API_KEY:}
+  security:
+    issuer: ${TICKETING_SECURITY_ISSUER:}
+    jwk-set-uri: ${TICKETING_SECURITY_JWK_SET_URI:}
+    allowed-client-ids: ${TICKETING_SECURITY_ALLOWED_CLIENT_IDS:}
+  worker:
+    id: ${TICKETING_WORKER_ID:}

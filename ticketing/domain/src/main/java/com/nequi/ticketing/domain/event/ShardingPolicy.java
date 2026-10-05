@@ -6,17 +6,53 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
-public final class ShardingPolicy {
+/**
+ * Sharding of the write-distributed indexes (ADR-022, data model §2 and §4) with configurable counts (plan
+ * Annex A, IV-015) and the approved values in {@link #DEPLOYED}: {@code availabilityShards = min(32, max(1,
+ * ceil(capacity / 2000)))} per Event (persisted with the Event, so changing the divisor or the maximum only
+ * affects new Events), 8 {@code RESV#} shards, 4 {@code REVERSAL#} shards and 8 {@code PENDQ#} shards. The
+ * {@code api} and {@code worker} roles must use the same {@code RESV#}, {@code REVERSAL#} and {@code PENDQ#}
+ * counts: the shard of an Order is computed when it is written and visited by the periodic processes.
+ */
+public record ShardingPolicy(
+        int availabilityShardDivisor,
+        int maximumAvailabilityShards,
+        int reservationShards,
+        int reversalShards,
+        int pendingEnqueueShards) {
 
-    public static final int RESERVATION_SHARDS = 8;
-    public static final int REVERSAL_SHARDS = 4;
-    public static final int PENDING_ENQUEUE_SHARDS = 8;
+    public static final ShardingPolicy DEPLOYED = new ShardingPolicy(2_000, 32, 8, 4, 8);
 
-    private ShardingPolicy() {
+    public ShardingPolicy {
+        if (availabilityShardDivisor < 1 || maximumAvailabilityShards < 1 || reservationShards < 1
+                || reversalShards < 1 || pendingEnqueueShards < 1) {
+            throw new IllegalArgumentException("shard counts and the availability divisor must be positive");
+        }
     }
 
+    /** Availability shards of an Event with the approved divisor (2,000) and maximum (32). */
     public static int availabilityShards(int capacity) {
-        return Math.min(32, Math.max(1, Math.ceilDiv(capacity, 2_000)));
+        return DEPLOYED.availabilityShardsFor(capacity);
+    }
+
+    /** Availability shards of an Event of {@code capacity} Tickets with this policy. */
+    public int availabilityShardsFor(int capacity) {
+        return Math.min(maximumAvailabilityShards, Math.max(1, Math.ceilDiv(capacity, availabilityShardDivisor)));
+    }
+
+    /** {@code RESV#} shard of an Order. */
+    public int reservationShard(String orderId) {
+        return shard(orderId, reservationShards);
+    }
+
+    /** {@code REVERSAL#} shard of an Order. */
+    public int reversalShard(String orderId) {
+        return shard(orderId, reversalShards);
+    }
+
+    /** {@code PENDQ#} shard of an Order. */
+    public int pendingEnqueueShard(String orderId) {
+        return shard(orderId, pendingEnqueueShards);
     }
 
     public static int shard(String stableIdentity, int shardCount) {

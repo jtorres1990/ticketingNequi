@@ -100,24 +100,24 @@ final class Keys {
         return section + "#" + row + "#" + "%04d".formatted(seat);
     }
 
-    static String reservations(String orderId) {
-        return "RESV#" + ShardingPolicy.shard(orderId, ShardingPolicy.RESERVATION_SHARDS);
+    static String reservations(String orderId, ShardingPolicy sharding) {
+        return "RESV#" + sharding.reservationShard(orderId);
     }
 
     static String reservationsShard(int shard) {
         return "RESV#" + shard;
     }
 
-    static String reversals(String orderId) {
-        return "REVERSAL#" + ShardingPolicy.shard(orderId, ShardingPolicy.REVERSAL_SHARDS);
+    static String reversals(String orderId, ShardingPolicy sharding) {
+        return "REVERSAL#" + sharding.reversalShard(orderId);
     }
 
     static String reversalsShard(int shard) {
         return "REVERSAL#" + shard;
     }
 
-    static String pendingEnqueue(String orderId) {
-        return "PENDQ#" + ShardingPolicy.shard(orderId, ShardingPolicy.PENDING_ENQUEUE_SHARDS);
+    static String pendingEnqueue(String orderId, ShardingPolicy sharding) {
+        return "PENDQ#" + sharding.pendingEnqueueShard(orderId);
     }
 
     static String pendingEnqueueShard(int shard) {

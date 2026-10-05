@@ -63,7 +63,9 @@ class EventProvisioningServiceTest {
         WorkerUseCaseSettings small = new WorkerUseCaseSettings(deployed.workerId(), deployed.paymentLeaseDuration(),
                 deployed.authorizationMargin(), deployed.provisioningLeaseDuration(),
                 new InventoryLimits(50_000, 100, 2_000, 1_000, 500, 10), deployed.stalledProvisioningThreshold(),
-                deployed.maximumProvisioningRepublications(), deployed.republishAge(), 16, 8, 4, 2, 5);
+                deployed.maximumProvisioningRepublications(), deployed.republishAge(), 16, 8, 4, 2, 5,
+                deployed.orderRules(), deployed.reversalSchedule(), deployed.maximumVerificationRepairs(),
+                deployed.sharding());
         return new EventProvisioningService(fixture.store, fixture.store, fixture.clock, small);
     }
 

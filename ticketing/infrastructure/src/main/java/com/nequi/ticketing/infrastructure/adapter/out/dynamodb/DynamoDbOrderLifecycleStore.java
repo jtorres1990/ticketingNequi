@@ -81,7 +81,7 @@ public final class DynamoDbOrderLifecycleStore implements OrderLifecycleStore {
                 items.add(table.update(TicketItems.key(order.eventId(), ticketId), update,
                         ItemRole.ticket(order.eventId(), ticketId)));
             }
-            items.add(table.insert(OrderItems.newOrder(order), ItemRole.of(FailedItem.ORDER)));
+            items.add(table.insert(OrderItems.newOrder(order, table.settings().sharding()), ItemRole.of(FailedItem.ORDER)));
             items.add(table.insert(IdempotencyItems.purchase(plan.idempotency()), ItemRole.of(FailedItem.IDEMPOTENCY_RECORD)));
             items.add(table.insert(AuditItems.item(plan.audit()), ItemRole.of(FailedItem.AUDIT)));
             items.add(table.insert(lock(plan.activeOrderKey(), order.orderId(), now), ItemRole.of(FailedItem.ACTIVE_ORDER_LOCK)));
@@ -313,7 +313,7 @@ public final class DynamoDbOrderLifecycleStore implements OrderLifecycleStore {
      * Terminal state of the Order item: status, cause, payment outcome, provider reference, reversal mark
      * (with its {@code REVERSAL#} entry) and removal of the active Order indexes and of the lease.
      */
-    private static Expression terminal(Order target, Instant now, String providerReference) {
+    private Expression terminal(Order target, Instant now, String providerReference) {
         Expression update = new Expression()
                 .set(OrderItems.STATUS, s(target.status().name()))
                 .set(OrderItems.UPDATED_AT, instant(now))
@@ -336,12 +336,12 @@ public final class DynamoDbOrderLifecycleStore implements OrderLifecycleStore {
                 OrderItems.PAYMENT_LEASE_OWNER, OrderItems.PAYMENT_LEASE_UNTIL_MS);
     }
 
-    private static void markReversal(Expression update, String orderId, ReversalPlan reversal) {
+    private void markReversal(Expression update, String orderId, ReversalPlan reversal) {
         update.set(OrderItems.REVERSAL_PENDING, bool(true))
                 .set(OrderItems.REVERSAL_REQUESTED_AT, instant(reversal.requestedAt()))
                 .set(OrderItems.REVERSAL_ATTEMPTS, n(reversal.attempts()))
                 .set(OrderItems.REVERSAL_NEXT_ATTEMPT_AT_MS, millis(reversal.nextAttemptAt()))
-                .set(OrderItems.GSI3PK, s(Keys.reversals(orderId)))
+                .set(OrderItems.GSI3PK, s(Keys.reversals(orderId, table.settings().sharding())))
                 .set(OrderItems.GSI3SK, s(Keys.millisSort(reversal.nextAttemptAt(), orderId)));
     }
 

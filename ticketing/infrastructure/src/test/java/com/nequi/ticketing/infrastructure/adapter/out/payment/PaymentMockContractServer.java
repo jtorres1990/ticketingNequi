@@ -44,7 +44,7 @@ import tools.jackson.databind.node.ObjectNode;
  *       violations are exposed to the tests.</li>
  * </ul>
  */
-final class PaymentMockContractServer implements AutoCloseable {
+public final class PaymentMockContractServer implements AutoCloseable {
 
     static final String CONTRACT = "/contracts/payment-mock.openapi.v1.yaml";
 
@@ -72,7 +72,7 @@ final class PaymentMockContractServer implements AutoCloseable {
                 .bindNow();
     }
 
-    static PaymentMockContractServer start(String apiKey) {
+    public static PaymentMockContractServer start(String apiKey) {
         return new PaymentMockContractServer(apiKey);
     }
 
@@ -85,42 +85,42 @@ final class PaymentMockContractServer implements AutoCloseable {
         }
     }
 
-    String baseUrl() {
+    public String baseUrl() {
         return "http://127.0.0.1:" + server.port();
     }
 
-    void behaviour(String orderId, Behaviour behaviour) {
+    public void behaviour(String orderId, Behaviour behaviour) {
         behaviours.put(orderId, behaviour);
     }
 
-    void defaultBehaviour(Behaviour behaviour) {
+    public void defaultBehaviour(Behaviour behaviour) {
         defaultBehaviour = behaviour;
     }
 
     /** API-102 for this attempt answers with the given status (401, 500, 503...) without recording anything. */
-    void failCancellation(String paymentAttemptId, int status) {
+    public void failCancellation(String paymentAttemptId, int status) {
         cancellationFailures.put(paymentAttemptId, status);
     }
 
-    List<RecordedRequest> requests() {
+    public List<RecordedRequest> requests() {
         return List.copyOf(requests);
     }
 
-    List<RecordedRequest> requests(String operation) {
+    public List<RecordedRequest> requests(String operation) {
         return requests.stream().filter(request -> request.operation().equals(operation)).toList();
     }
 
-    int authorizations(String paymentAttemptId) {
+    public int authorizations(String paymentAttemptId) {
         Attempt attempt = attempts.get(paymentAttemptId);
         return attempt == null ? 0 : attempt.invocations.get();
     }
 
-    int cancellations(String paymentAttemptId) {
+    public int cancellations(String paymentAttemptId) {
         Attempt attempt = attempts.get(paymentAttemptId);
         return attempt == null ? 0 : attempt.cancellationsReceived.get();
     }
 
-    List<String> contractViolations() {
+    public List<String> contractViolations() {
         return List.copyOf(violations);
     }
 
@@ -317,7 +317,7 @@ final class PaymentMockContractServer implements AutoCloseable {
         return new Reply(status, JSON.writeValueAsString(body), true);
     }
 
-    record RecordedRequest(String operation, String uri, String apiKey, String idempotencyKey, String contentType,
+    public record RecordedRequest(String operation, String uri, String apiKey, String idempotencyKey, String contentType,
             String accept, String body) {
 
         JsonNode json() {
@@ -343,7 +343,7 @@ final class PaymentMockContractServer implements AutoCloseable {
         }
     }
 
-    enum Type {
+    public enum Type {
         APPROVE,
         DECLINE,
         DEFINITIVE_ERROR,
@@ -355,30 +355,30 @@ final class PaymentMockContractServer implements AutoCloseable {
     }
 
     /** Behaviour of API-101 for an {@code orderId} (contract {@code OutcomeRuleInput.behaviour}). */
-    record Behaviour(Type type, String reasonCode, int status, int transientFailures, String finalOutcome,
+    public record Behaviour(Type type, String reasonCode, int status, int transientFailures, String finalOutcome,
             Duration latency) {
 
-        static Behaviour approve() {
+        public static Behaviour approve() {
             return new Behaviour(Type.APPROVE, null, 200, 0, null, Duration.ZERO);
         }
 
-        static Behaviour decline(String reasonCode) {
+        public static Behaviour decline(String reasonCode) {
             return new Behaviour(Type.DECLINE, reasonCode, 200, 0, null, Duration.ZERO);
         }
 
-        static Behaviour definitiveError(int status) {
+        public static Behaviour definitiveError(int status) {
             return new Behaviour(Type.DEFINITIVE_ERROR, null, status, 0, null, Duration.ZERO);
         }
 
-        static Behaviour transientThen(int failures, int status, String finalOutcome) {
+        public static Behaviour transientThen(int failures, int status, String finalOutcome) {
             return new Behaviour(Type.TRANSIENT_THEN_OUTCOME, null, status, failures, finalOutcome, Duration.ZERO);
         }
 
-        static Behaviour latency(Duration latency) {
+        public static Behaviour latency(Duration latency) {
             return new Behaviour(Type.LATENCY, null, 200, 0, null, latency);
         }
 
-        static Behaviour of(Type type) {
+        public static Behaviour of(Type type) {
             return new Behaviour(type, null, 200, 0, null, Duration.ZERO);
         }
     }

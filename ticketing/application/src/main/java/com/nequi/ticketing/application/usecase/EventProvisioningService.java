@@ -89,7 +89,7 @@ public final class EventProvisioningService implements ProvisionEventUseCase {
         Instant now = clock.now();
         ProvisioningMessagePolicy.Action action = ProvisioningMessagePolicy.decide(new ProvisioningMessagePolicy.Snapshot(
                 true, true, snapshot.event().provisioningStatus(), snapshot.leaseHeldByOtherAt(run.leaseOwner(), now),
-                false, false, false, false, 0, false, run.lastReception()));
+                false, false, false, false, 0, false, run.lastReception()), settings.maximumVerificationRepairs());
         return switch (action) {
             case DELETE_NOOP -> Mono.just(MessageDisposition.delete(DispositionReason.ALREADY_TERMINAL));
             case POSTPONE_TO_LEASE_END -> Mono.just(MessageDisposition.postponeUntil(
@@ -146,7 +146,7 @@ public final class EventProvisioningService implements ProvisionEventUseCase {
         return ticketInventory.verify(event, expected).flatMap(verification -> {
             ProvisioningMessagePolicy.Action action = ProvisioningMessagePolicy.decide(new ProvisioningMessagePolicy.Snapshot(
                     true, true, event.provisioningStatus(), false, true, false, true, verification.complete(),
-                    repairs, false, run.lastReception()));
+                    repairs, false, run.lastReception()), settings.maximumVerificationRepairs());
             return switch (action) {
                 case ENABLE_AND_DELETE -> enable(run, event, inventory, verification, evaluations);
                 case REPAIR_AND_VERIFY -> repair(run, event, inventory, verification).flatMap(repaired -> repaired
@@ -202,7 +202,7 @@ public final class EventProvisioningService implements ProvisionEventUseCase {
                     ProvisioningMessagePolicy.Action action = ProvisioningMessagePolicy.decide(
                             new ProvisioningMessagePolicy.Snapshot(true, true, snapshot.event().provisioningStatus(),
                                     snapshot.leaseHeldByOtherAt(run.leaseOwner(), now), false, false, false, false, 0,
-                                    true, true));
+                                    true, true), settings.maximumVerificationRepairs());
                     return switch (action) {
                         case DELETE_NOOP -> Mono.just(MessageDisposition.delete(DispositionReason.ALREADY_TERMINAL));
                         case POSTPONE_TO_LEASE_END -> Mono.just(MessageDisposition.postponeUntil(

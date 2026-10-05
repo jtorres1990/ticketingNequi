@@ -162,6 +162,7 @@ class PortContractModelTest {
 
     private static ApiUseCaseSettings settings(Duration cacheTtl, int defaultEventPageSize, int probeConcurrency) {
         return new ApiUseCaseSettings(InventoryLimits.DEPLOYED, Duration.ofHours(24), Duration.ofSeconds(1),
-                Duration.ofSeconds(1), Duration.ofSeconds(1), defaultEventPageSize, 100, 50, 100, cacheTtl, probeConcurrency);
+                Duration.ofSeconds(1), Duration.ofSeconds(1), defaultEventPageSize, 100, 50, 100, cacheTtl, probeConcurrency,
+                com.nequi.ticketing.domain.order.OrderRules.DEPLOYED, com.nequi.ticketing.domain.event.ShardingPolicy.DEPLOYED);
     }
 }

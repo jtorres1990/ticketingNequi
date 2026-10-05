@@ -77,7 +77,7 @@ class PeriodicTriggerTest {
         Set<Long> firstStarts = new HashSet<>();
         for (int instance = 0; instance < 20; instance++) {
             List<Long> instanceStarts = new ArrayList<>();
-            PeriodicTrigger trigger = new PeriodicTrigger(PeriodicProcess.EXPIRATION, EXPIRATION,
+            PeriodicTrigger trigger = new PeriodicTrigger(PeriodicProcess.EXPIRATION, PeriodicProcess.EXPIRATION.shardCount(), EXPIRATION,
                     request -> Mono.fromRunnable(() -> instanceStarts.add(now())).thenReturn(result(ItemOutcome.EXPIRED, 1)),
                     () -> false, scheduler, SchedulerEvents.NONE, new SplittableRandom(instance));
             long startedAt = now();
@@ -169,7 +169,7 @@ class PeriodicTriggerTest {
     @Test
     @DisplayName("ADR-028 rule 3 a use case that throws instead of signalling is a failed cycle")
     void synchronousThrowIsAFailure() {
-        PeriodicTrigger trigger = new PeriodicTrigger(PeriodicProcess.EXPIRATION, EXPIRATION, request -> {
+        PeriodicTrigger trigger = new PeriodicTrigger(PeriodicProcess.EXPIRATION, PeriodicProcess.EXPIRATION.shardCount(), EXPIRATION, request -> {
             starts.add(now());
             throw new IllegalStateException("thrown");
         }, () -> false, scheduler, events, new FixedRandom(0));
@@ -233,6 +233,32 @@ class PeriodicTriggerTest {
     }
 
     @Test
+    @DisplayName("IV-015 ADR-022 each cycle visits the shards of the configured sharding")
+    void configuredShardCounts() {
+        com.nequi.ticketing.domain.event.ShardingPolicy sharding =
+                new com.nequi.ticketing.domain.event.ShardingPolicy(2_000, 32, 2, 3, 5);
+        WorkerSchedulerSettings settings = new WorkerSchedulerSettings(EXPIRATION, EXPIRATION, EXPIRATION, EXPIRATION,
+                sharding);
+        assertThat(List.of(settings.shardCount(PeriodicProcess.EXPIRATION), settings.shardCount(PeriodicProcess.REPUBLISH),
+                settings.shardCount(PeriodicProcess.REVERSAL), settings.shardCount(PeriodicProcess.PROVISIONING_CLEANUP)))
+                .containsExactly(2, 5, 3, 0);
+        assertThat(WorkerSchedulerSettings.DEPLOYED.sharding())
+                .isEqualTo(com.nequi.ticketing.domain.event.ShardingPolicy.DEPLOYED);
+        PeriodicTrigger trigger = new PeriodicTrigger(PeriodicProcess.REVERSAL, 3, EXPIRATION, this::invoke, () -> false,
+                scheduler, events, new FixedRandom(0));
+        trigger.start();
+        scheduler.advanceTime();
+        assertThat(requests).singleElement().satisfies(request ->
+                assertThat(request.shardOrder()).containsExactlyInAnyOrder(0, 1, 2));
+        trigger.dispose();
+        assertThatThrownBy(() -> new PeriodicTrigger(PeriodicProcess.REVERSAL, -1, EXPIRATION, this::invoke,
+                () -> false, scheduler, events, new FixedRandom(0))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> settings.shardCount(null)).isInstanceOf(NullPointerException.class);
+        assertThatThrownBy(() -> new WorkerSchedulerSettings(EXPIRATION, EXPIRATION, EXPIRATION, EXPIRATION, null))
+                .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
     @DisplayName("ADR-028 an observation hook that throws never stops the process")
     void failingHookIsIgnored() {
         SchedulerEvents throwing = new SchedulerEvents() {
@@ -242,7 +268,7 @@ class PeriodicTriggerTest {
                 throw new IllegalStateException("hook failure");
             }
         };
-        new PeriodicTrigger(PeriodicProcess.EXPIRATION, EXPIRATION, this::invoke, () -> false, scheduler, throwing,
+        new PeriodicTrigger(PeriodicProcess.EXPIRATION, PeriodicProcess.EXPIRATION.shardCount(), EXPIRATION, this::invoke, () -> false, scheduler, throwing,
                 new FixedRandom(0)).start();
 
         scheduler.advanceTimeBy(Duration.ofSeconds(10));
@@ -382,7 +408,7 @@ class PeriodicTriggerTest {
                 return scheduler.createWorker();
             }
         };
-        PeriodicTrigger trigger = new PeriodicTrigger(PeriodicProcess.EXPIRATION, EXPIRATION, this::invoke,
+        PeriodicTrigger trigger = new PeriodicTrigger(PeriodicProcess.EXPIRATION, PeriodicProcess.EXPIRATION.shardCount(), EXPIRATION, this::invoke,
                 () -> false, racing, events, new FixedRandom(0));
         trigger.start();
         scheduler.advanceTime();
@@ -423,7 +449,7 @@ class PeriodicTriggerTest {
                 throw new UnsupportedOperationException("not used");
             }
         };
-        PeriodicTrigger trigger = new PeriodicTrigger(PeriodicProcess.EXPIRATION, EXPIRATION, this::invoke,
+        PeriodicTrigger trigger = new PeriodicTrigger(PeriodicProcess.EXPIRATION, PeriodicProcess.EXPIRATION.shardCount(), EXPIRATION, this::invoke,
                 () -> false, rejecting, events, new FixedRandom(0));
 
         trigger.start();
@@ -483,7 +509,7 @@ class PeriodicTriggerTest {
 
     private PeriodicTrigger trigger(PeriodicProcess process, PeriodicProcessSettings settings, RandomGenerator random,
             BooleanSupplier paused) {
-        return new PeriodicTrigger(process, settings, this::invoke, paused, scheduler, events, random);
+        return new PeriodicTrigger(process, process.shardCount(), settings, this::invoke, paused, scheduler, events, random);
     }
 
     private Mono<CycleResult> invoke(CycleRequest request) {

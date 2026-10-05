@@ -13,9 +13,16 @@ public final class OrderMessagePolicy {
     private OrderMessagePolicy() {
     }
 
+    /** {@link #decide(Snapshot, Instant, Duration)} with the approved payment cutoff margin (15 s). */
     public static Action decide(Snapshot snapshot, Instant now) {
+        return decide(snapshot, now, Order.PAYMENT_CUTOFF);
+    }
+
+    /** Ordered rules of messaging v2 §5.1 with the configurable payment cutoff margin (BR-029, IV-015). */
+    public static Action decide(Snapshot snapshot, Instant now, Duration paymentCutoff) {
         required(snapshot, "snapshot");
         required(now, "now");
+        required(paymentCutoff, "paymentCutoff");
         if (!snapshot.messageReadable() || !snapshot.orderPresent()) {
             return Action.POISON_KEEP_WITH_SHORT_VISIBILITY;
         }
@@ -30,7 +37,7 @@ public final class OrderMessagePolicy {
         }
         if (!snapshot.hasPaymentAttempt()) {
             Duration remaining = Duration.between(now, snapshot.expiresAt());
-            if (remaining.compareTo(Order.PAYMENT_CUTOFF) <= 0) {
+            if (remaining.compareTo(paymentCutoff) <= 0) {
                 return !snapshot.expiresAt().isAfter(now)
                         ? Action.EXPIRE_AND_DELETE
                         : Action.DELETE_WAIT_FOR_EXPIRATION;

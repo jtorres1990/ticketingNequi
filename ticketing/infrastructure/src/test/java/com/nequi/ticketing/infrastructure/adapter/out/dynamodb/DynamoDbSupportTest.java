@@ -84,9 +84,13 @@ class DynamoDbSupportTest {
         assertThat(Keys.availabilitySort("VIP", "R1", 7)).isEqualTo("VIP#R1#0007");
         assertThat(TicketItems.availabilitySort("VIP-R1-12")).isEqualTo("VIP#R1#0012");
         assertThatThrownBy(() -> TicketItems.availabilitySort("VIP-R1")).isInstanceOf(IllegalArgumentException.class);
-        assertThat(Keys.reservations("o-1")).isEqualTo("RESV#" + ShardingPolicy.shard("o-1", 8));
-        assertThat(Keys.reversals("o-1")).isEqualTo("REVERSAL#" + ShardingPolicy.shard("o-1", 4));
-        assertThat(Keys.pendingEnqueue("o-1")).isEqualTo("PENDQ#" + ShardingPolicy.shard("o-1", 8));
+        assertThat(Keys.reservations("o-1", ShardingPolicy.DEPLOYED)).isEqualTo("RESV#" + ShardingPolicy.shard("o-1", 8));
+        assertThat(Keys.reversals("o-1", ShardingPolicy.DEPLOYED)).isEqualTo("REVERSAL#" + ShardingPolicy.shard("o-1", 4));
+        assertThat(Keys.pendingEnqueue("o-1", ShardingPolicy.DEPLOYED)).isEqualTo("PENDQ#" + ShardingPolicy.shard("o-1", 8));
+        ShardingPolicy configured = new ShardingPolicy(2_000, 32, 3, 2, 5);
+        assertThat(Keys.reservations("o-1", configured)).isEqualTo("RESV#" + ShardingPolicy.shard("o-1", 3));
+        assertThat(Keys.reversals("o-1", configured)).isEqualTo("REVERSAL#" + ShardingPolicy.shard("o-1", 2));
+        assertThat(Keys.pendingEnqueue("o-1", configured)).isEqualTo("PENDQ#" + ShardingPolicy.shard("o-1", 5));
         assertThat(Keys.purchaseIdempotency("c", "k")).isEqualTo("IDEM#c#k");
         assertThat(Keys.eventCreationIdempotency("a", "k")).isEqualTo("IDEMEVT#a#k");
         assertThat(Keys.activeOrder("c", "e")).isEqualTo("ACTIVE#c#e");
@@ -143,7 +147,7 @@ class DynamoDbSupportTest {
         assertThatThrownBy(() -> settings(2, 0.5, 26, 4)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> settings(2, 0.5, 25, 0)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new DynamoDbAdapterSettings("t", 2, Duration.ofMillis(300), Duration.ofMillis(200), 0.5,
-                25, 4, 100, 4, 5, Duration.ofMillis(50), Duration.ofSeconds(1), 4, 0, 10_000))
+                25, 4, 100, 4, 5, Duration.ofMillis(50), Duration.ofSeconds(1), 4, 0, 10_000, ShardingPolicy.DEPLOYED))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new DynamoDbConnectionSettings(null, " ")).isInstanceOf(IllegalArgumentException.class);
     }
@@ -180,7 +184,7 @@ class DynamoDbSupportTest {
 
     private static DynamoDbAdapterSettings settings(int retries, double jitter, int batchWrite, int parallelism) {
         return new DynamoDbAdapterSettings("t", retries, Duration.ofMillis(25), Duration.ofMillis(200), jitter, batchWrite,
-                parallelism, 100, 4, 5, Duration.ofMillis(50), Duration.ofSeconds(1), 4, 0, 10_000);
+                parallelism, 100, 4, 5, Duration.ofMillis(50), Duration.ofSeconds(1), 4, 0, 10_000, ShardingPolicy.DEPLOYED);
     }
 
     private static String encode(String payload) {

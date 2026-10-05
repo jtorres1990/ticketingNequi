@@ -20,7 +20,9 @@ public record Order(
         String quarantineReason,
         ReversalPlan reversalPlan) {
 
+    /** Fixed Reservation duration (spec §13.1: not configurable). */
     public static final Duration RESERVATION_DURATION = Duration.ofMinutes(10);
+    /** Approved payment cutoff margin ({@link OrderRules#DEPLOYED}); the effective value is configurable. */
     public static final Duration PAYMENT_CUTOFF = Duration.ofSeconds(15);
 
     public Order {
@@ -30,8 +32,10 @@ public record Order(
         ticketIds = List.copyOf(required(ticketIds, "ticketIds"));
         status = required(status, "status");
         reservation = required(reservation, "reservation");
-        if (ticketIds.isEmpty() || ticketIds.size() > 10 || ticketIds.stream().distinct().count() != ticketIds.size()) {
-            throw new IllegalArgumentException("an order must contain 1..10 unique tickets");
+        if (ticketIds.isEmpty() || ticketIds.size() > OrderRules.ABSOLUTE_MAXIMUM_TICKETS
+                || ticketIds.stream().distinct().count() != ticketIds.size()) {
+            throw new IllegalArgumentException("an order must contain 1.."
+                    + OrderRules.ABSOLUTE_MAXIMUM_TICKETS + " unique tickets");
         }
         if ((quarantinedAt == null) != (quarantineReason == null)) {
             throw new IllegalArgumentException("quarantine time and reason must be set together");
@@ -46,14 +50,20 @@ public record Order(
                 null, reservation, null, null, null, null);
     }
 
+    /** {@link #startPayment(Instant, Duration)} with the approved cutoff margin of 15 s. */
     public Order startPayment(Instant now) {
+        return startPayment(now, PAYMENT_CUTOFF);
+    }
+
+    /** Starts the single PaymentAttempt; never inside the configurable cutoff margin before expiry (BR-029). */
+    public Order startPayment(Instant now, Duration paymentCutoff) {
         requireActive();
         if (paymentAttempt != null) {
             throw new InvalidStateTransitionException("an Order has at most one payment attempt");
         }
-        Instant cutoff = required(now, "now").plus(PAYMENT_CUTOFF);
+        Instant cutoff = required(now, "now").plus(required(paymentCutoff, "paymentCutoff"));
         if (!reservation.expiresAt().isAfter(cutoff)) {
-            throw new InvalidStateTransitionException("payment cannot start inside the 15 second cutoff");
+            throw new InvalidStateTransitionException("payment cannot start inside the cutoff margin");
         }
         return copy(status, failureCause, new PaymentAttempt(orderId + "-1", PaymentOutcome.UNKNOWN, now),
                 quarantinedAt, quarantineReason, reversalPlan);
@@ -152,10 +162,15 @@ public record Order(
                 requireReversal().complete(now));
     }
 
-    /** AP-030 "reschedule" or "exhaust": one more transient cancellation failure (ADR-025). */
+    /** {@link #rescheduleReversal(Instant, ReversalSchedule)} with the approved schedule. */
     public Order rescheduleReversal(Instant now) {
+        return rescheduleReversal(now, ReversalSchedule.DEPLOYED);
+    }
+
+    /** AP-030 "reschedule" or "exhaust": one more transient cancellation failure (ADR-025). */
+    public Order rescheduleReversal(Instant now, ReversalSchedule schedule) {
         return copy(status, failureCause, paymentAttempt, quarantinedAt, quarantineReason,
-                requireReversal().reschedule(now));
+                requireReversal().reschedule(now, schedule));
     }
 
     public boolean reversalPending() {

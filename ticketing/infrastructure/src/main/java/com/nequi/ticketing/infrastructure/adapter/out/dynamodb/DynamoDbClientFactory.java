@@ -30,8 +30,20 @@ public final class DynamoDbClientFactory {
     }
 
     public static DynamoDbAsyncClient create(DynamoDbConnectionSettings settings, AwsCredentialsProvider credentials) {
+        return create(settings, credentials, DynamoDbEvents.NONE);
+    }
+
+    /** Client with the default credential chain whose executions are reported to {@code events} (CMP-018). */
+    public static DynamoDbAsyncClient create(DynamoDbConnectionSettings settings, DynamoDbEvents events) {
+        return create(settings, DefaultCredentialsProvider.builder().asyncCredentialUpdateEnabled(true).build(), events);
+    }
+
+    /** Client whose executions (operation, outcome, duration) are reported to {@code events} (CMP-018). */
+    public static DynamoDbAsyncClient create(DynamoDbConnectionSettings settings, AwsCredentialsProvider credentials,
+            DynamoDbEvents events) {
         Objects.requireNonNull(settings, "settings");
         Objects.requireNonNull(credentials, "credentials");
+        Objects.requireNonNull(events, "events");
         // The profile file is read once here: by default the SDK re-checks the profile files on the calling
         // thread of every request, which is file-system I/O inside the reactive pipeline (NFR-003).
         ProfileFileSupplier profileFile = ProfileFileSupplier.fixedProfileFile(ProfileFile.defaultProfileFile());
@@ -41,7 +53,8 @@ public final class DynamoDbClientFactory {
                 .httpClientBuilder(NettyNioAsyncHttpClient.builder())
                 .overrideConfiguration(configuration -> configuration
                         .retryStrategy(RetryMode.STANDARD)
-                        .defaultProfileFileSupplier(profileFile));
+                        .defaultProfileFileSupplier(profileFile)
+                        .addExecutionInterceptor(new DynamoDbMetricsInterceptor(events, System::nanoTime)));
         if (settings.endpointOverride() != null) {
             builder.endpointOverride(settings.endpointOverride());
         }

@@ -78,13 +78,17 @@ public final class WorkerScheduler implements Disposable {
         Objects.requireNonNull(scheduler, "scheduler");
         Objects.requireNonNull(random, "random");
         return new WorkerScheduler(List.of(
-                new PeriodicTrigger(PeriodicProcess.EXPIRATION, settings.expiration(), expiration::expireDue,
-                        () -> false, scheduler, events, new SplittableRandom(random.nextLong())),
-                new PeriodicTrigger(PeriodicProcess.REPUBLISH, settings.republish(), republish::republishPending,
-                        () -> false, scheduler, events, new SplittableRandom(random.nextLong())),
-                new PeriodicTrigger(PeriodicProcess.REVERSAL, settings.reversal(), reversal::reverseDue,
-                        reversalGate::isPaused, scheduler, events, new SplittableRandom(random.nextLong())),
-                new PeriodicTrigger(PeriodicProcess.PROVISIONING_CLEANUP, settings.provisioningCleanup(),
+                new PeriodicTrigger(PeriodicProcess.EXPIRATION, settings.shardCount(PeriodicProcess.EXPIRATION),
+                        settings.expiration(), expiration::expireDue, () -> false, scheduler, events,
+                        new SplittableRandom(random.nextLong())),
+                new PeriodicTrigger(PeriodicProcess.REPUBLISH, settings.shardCount(PeriodicProcess.REPUBLISH),
+                        settings.republish(), republish::republishPending, () -> false, scheduler, events,
+                        new SplittableRandom(random.nextLong())),
+                new PeriodicTrigger(PeriodicProcess.REVERSAL, settings.shardCount(PeriodicProcess.REVERSAL),
+                        settings.reversal(), reversal::reverseDue, reversalGate::isPaused, scheduler, events,
+                        new SplittableRandom(random.nextLong())),
+                new PeriodicTrigger(PeriodicProcess.PROVISIONING_CLEANUP,
+                        settings.shardCount(PeriodicProcess.PROVISIONING_CLEANUP), settings.provisioningCleanup(),
                         provisioningCleanup::cleanUp, () -> false, scheduler, events,
                         new SplittableRandom(random.nextLong()))));
     }

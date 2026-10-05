@@ -11,7 +11,6 @@ import com.nequi.ticketing.application.port.out.OrderReader;
 import com.nequi.ticketing.application.port.out.TransactionOutcome;
 import com.nequi.ticketing.domain.audit.AuditRecord.Actor;
 import com.nequi.ticketing.domain.audit.AuditRecord.ActorType;
-import com.nequi.ticketing.domain.event.ShardingPolicy;
 import com.nequi.ticketing.domain.order.Order;
 import com.nequi.ticketing.domain.order.Order.OrderStatus;
 import java.time.Instant;
@@ -56,7 +55,7 @@ public final class ReservationExpirationService implements ExpireReservationsUse
         return Mono.defer(() -> {
             Objects.requireNonNull(request, "request");
             Instant now = clock.now();
-            Flux<Optional<String>> candidates = Flux.fromIterable(request.shards(ShardingPolicy.RESERVATION_SHARDS))
+            Flux<Optional<String>> candidates = Flux.fromIterable(request.shards(settings.sharding().reservationShards()))
                     .concatMap(shard -> CycleSupport.guarded(orderReader.findDueReservations(shard, now)));
             return CycleSupport.summarize(CycleSupport.process(candidates,
                     orderId -> expireOne(orderId, request.correlationId()), settings.expirationConcurrency()));

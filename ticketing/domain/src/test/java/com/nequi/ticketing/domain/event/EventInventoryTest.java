@@ -66,8 +66,8 @@ class EventInventoryTest {
     @Test
     @DisplayName("ADR-022 stable hash always returns the same bounded shard")
     void stableHashIsDeterministic() {
-        int first = ShardingPolicy.shard("order-123", ShardingPolicy.RESERVATION_SHARDS);
-        assertThat(ShardingPolicy.shard("order-123", ShardingPolicy.RESERVATION_SHARDS)).isEqualTo(first);
+        int first = ShardingPolicy.shard("order-123", ShardingPolicy.DEPLOYED.reservationShards());
+        assertThat(ShardingPolicy.shard("order-123", ShardingPolicy.DEPLOYED.reservationShards())).isEqualTo(first);
         assertThat(first).isBetween(0, 7);
         assertThatThrownBy(() -> ShardingPolicy.shard("order", 0)).isInstanceOf(IllegalArgumentException.class);
     }

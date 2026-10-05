@@ -189,8 +189,8 @@ class ReservationExpirationServiceTest {
     void visitsOnlyRequestedShards() {
         Order order = fixture.createOrder(CUSTOMER_A, key(1), "A-1-1");
         fixture.clock.set(order.reservation().expiresAt());
-        int shard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.RESERVATION_SHARDS);
-        int other = (shard + 1) % ShardingPolicy.RESERVATION_SHARDS;
+        int shard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.DEPLOYED.reservationShards());
+        int other = (shard + 1) % ShardingPolicy.DEPLOYED.reservationShards();
 
         CycleResult skipped = value(fixture.expiration.expireDue(new CycleRequest(WorkerFixture.CORRELATION,
                 List.of(other, 99, -1))));

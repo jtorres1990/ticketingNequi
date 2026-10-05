@@ -7,7 +7,7 @@ import com.tngtech.archunit.lang.ArchRule;
 
 @AnalyzeClasses(
         packages = "com.nequi.ticketing",
-        importOptions = ImportOption.DoNotIncludeTests.class)
+        importOptions = {ImportOption.DoNotIncludeTests.class, ExcludeTestArtifacts.class})
 class CleanArchitectureTest {
 
     @ArchTest
@@ -52,6 +52,10 @@ class CleanArchitectureTest {
     @ArchTest
     static final ArchRule USE_CASES_DO_NOT_DEPEND_ON_INFRASTRUCTURE =
             ArchitectureRules.useCasesDoNotDependOnInfrastructure();
+
+    @ArchTest
+    static final ArchRule CONFIGURED_RULES_ARE_USED_OUTSIDE_THE_DOMAIN =
+            ArchitectureRules.configuredRulesAreUsedOutsideTheDomain();
 
     @ArchTest
     static final ArchRule PRODUCTION_CODE_HAS_NO_BLOCKING_CALLS = ArchitectureRules.noBlockingCalls();

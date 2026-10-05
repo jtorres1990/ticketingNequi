@@ -451,7 +451,7 @@ class OrderProcessingServiceTest {
         assertThat(quarantined.actor().type()).isEqualTo(ActorType.WORKER);
         assertThat(quarantined.cause()).isEqualTo(OrderQuarantine.ON_PAYMENT_START);
         assertThat(fixture.gateway.authorizations()).isEmpty();
-        int shard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.RESERVATION_SHARDS);
+        int shard = ShardingPolicy.shard(order.orderId(), ShardingPolicy.DEPLOYED.reservationShards());
         fixture.clock.set(order.reservation().expiresAt().plusSeconds(1));
         assertThat(value(fixture.store.findDueReservations(shard, fixture.clock.now()).collectList())).isEmpty();
         assertThat(OrderViews.of(stored).status()).isEqualTo(OrderStatus.CREATED);

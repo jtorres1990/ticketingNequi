@@ -12,7 +12,6 @@ import com.nequi.ticketing.application.port.out.OrderReader;
 import com.nequi.ticketing.application.port.out.OrderRecord;
 import com.nequi.ticketing.application.port.out.PublishResult;
 import com.nequi.ticketing.application.port.out.PublisherAvailability;
-import com.nequi.ticketing.domain.event.ShardingPolicy;
 import com.nequi.ticketing.domain.order.Order;
 import com.nequi.ticketing.domain.order.Order.OrderStatus;
 import java.time.Duration;
@@ -59,7 +58,7 @@ public final class EnqueueRepublishService implements RepublishPendingOrdersUseC
                 return Mono.just(CycleResult.skippedCycle());
             }
             Instant createdBefore = clock.now().minus(settings.republishAge());
-            Flux<Optional<String>> candidates = Flux.fromIterable(request.shards(ShardingPolicy.PENDING_ENQUEUE_SHARDS))
+            Flux<Optional<String>> candidates = Flux.fromIterable(request.shards(settings.sharding().pendingEnqueueShards()))
                     .concatMap(shard -> CycleSupport.guarded(orderReader.findPendingEnqueue(shard, createdBefore)));
             return CycleSupport.summarize(CycleSupport.process(candidates,
                     orderId -> republishOne(orderId, request.correlationId()), settings.republishConcurrency()));
@@ -93,6 +92,6 @@ public final class EnqueueRepublishService implements RepublishPendingOrdersUseC
                 && !record.enqueued()
                 && order.quarantinedAt() == null
                 && record.createdAt().isBefore(now.minus(settings.republishAge()))
-                && Duration.between(now, order.reservation().expiresAt()).compareTo(Order.PAYMENT_CUTOFF) >= 0;
+                && Duration.between(now, order.reservation().expiresAt()).compareTo(settings.orderRules().paymentCutoff()) >= 0;
     }
 }

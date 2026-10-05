@@ -15,6 +15,7 @@ import com.nequi.ticketing.application.port.out.OrderRecord;
 import com.nequi.ticketing.application.port.out.PaymentLease;
 import com.nequi.ticketing.domain.audit.AuditRecord;
 import com.nequi.ticketing.domain.audit.AuditRecord.AuditCode;
+import com.nequi.ticketing.domain.event.ShardingPolicy;
 import com.nequi.ticketing.domain.order.Order;
 import com.nequi.ticketing.domain.order.PurchaseRequest;
 import java.time.Duration;
@@ -54,7 +55,7 @@ class DynamoDbReadsTest {
                 NOW).startPayment(NOW.plusSeconds(5)).failProcessing(NOW.plusSeconds(9))
                 .rescheduleReversal(NOW.plusSeconds(10));
         Map<String, AttributeValue> item = new HashMap<>(OrderItems.newOrder(Order.create("o-1", "customer-1",
-                new PurchaseRequest("e-1", List.of("A-1-1"), "purchase-key-00000001"), NOW)));
+                new PurchaseRequest("e-1", List.of("A-1-1"), "purchase-key-00000001"), NOW), ShardingPolicy.DEPLOYED));
         item.put("status", AttributeValue.fromS("FAILED"));
         item.put("failureCause", AttributeValue.fromS("PROCESSING_FAILED"));
         item.put("updatedAt", AttributeValue.fromS(NOW.plusSeconds(9).toString()));
@@ -73,7 +74,7 @@ class DynamoDbReadsTest {
         when(client.getItem(any(GetItemRequest.class)))
                 .thenReturn(done(GetItemResponse.builder().item(item).build()))
                 .thenReturn(done(GetItemResponse.builder().build()))
-                .thenReturn(done(GetItemResponse.builder().item(OrderItems.newOrder(fresh)).build()))
+                .thenReturn(done(GetItemResponse.builder().item(OrderItems.newOrder(fresh, ShardingPolicy.DEPLOYED)).build()))
                 .thenReturn(failed(ResourceNotFoundException.builder().message("no table").build()));
 
         assertThat(persistence.orderReader().findById("o-1").block()).isEqualTo(new OrderRecord(order, NOW,

@@ -110,6 +110,7 @@ public final class InMemoryTicketingStore
     private final Map<Operation, AtomicInteger> calls = new ConcurrentHashMap<>();
     private final Map<Operation, Runnable> hooks = new ConcurrentHashMap<>();
     private final List<List<String>> writtenBatches = new ArrayList<>();
+    private volatile ShardingPolicy sharding = ShardingPolicy.DEPLOYED;
 
     // ----------------------------------------------------------------- EventCatalog
 
@@ -731,7 +732,7 @@ public final class InMemoryTicketingStore
     public Flux<String> findDueReservations(int shard, Instant now) {
         return query(Operation.FIND_DUE_RESERVATIONS, record -> record.order().status() == OrderStatus.CREATED
                         && record.order().quarantinedAt() == null
-                        && ShardingPolicy.shard(record.order().orderId(), ShardingPolicy.RESERVATION_SHARDS) == shard
+                        && ShardingPolicy.shard(record.order().orderId(), sharding.reservationShards()) == shard
                         && !record.order().reservation().expiresAt().isAfter(now),
                 Comparator.comparing(record -> record.order().reservation().expiresAt()));
     }
@@ -742,7 +743,7 @@ public final class InMemoryTicketingStore
         return query(Operation.FIND_PENDING_ENQUEUE, record -> record.order().status() == OrderStatus.CREATED
                         && !record.enqueued()
                         && record.order().quarantinedAt() == null
-                        && ShardingPolicy.shard(record.order().orderId(), ShardingPolicy.PENDING_ENQUEUE_SHARDS) == shard
+                        && ShardingPolicy.shard(record.order().orderId(), sharding.pendingEnqueueShards()) == shard
                         && record.createdAt().isBefore(createdBefore),
                 Comparator.comparing(OrderRecord::createdAt));
     }
@@ -752,7 +753,7 @@ public final class InMemoryTicketingStore
     public Flux<String> findDueReversals(int shard, Instant now) {
         return query(Operation.FIND_DUE_REVERSALS, record -> record.order().reversalPending()
                         && !record.order().reversalPlan().exhausted()
-                        && ShardingPolicy.shard(record.order().orderId(), ShardingPolicy.REVERSAL_SHARDS) == shard
+                        && ShardingPolicy.shard(record.order().orderId(), sharding.reversalShards()) == shard
                         && !record.order().reversalPlan().nextAttemptAt().isAfter(now),
                 Comparator.comparing(record -> record.order().reversalPlan().nextAttemptAt()));
     }
@@ -934,6 +935,11 @@ public final class InMemoryTicketingStore
     private TransactionOutcome scriptedOutcome(Operation operation) {
         Deque<TransactionOutcome> queue = scripted.get(operation);
         return queue == null ? null : queue.poll();
+    }
+
+    /** Uses the given sharding for the {@code RESV#}, {@code PENDQ#} and {@code REVERSAL#} queries (IV-015). */
+    public void useSharding(ShardingPolicy policy) {
+        this.sharding = java.util.Objects.requireNonNull(policy, "policy");
     }
 
     /** The next {@code times} invocations of {@code operation} fail with a simulated transient error. */

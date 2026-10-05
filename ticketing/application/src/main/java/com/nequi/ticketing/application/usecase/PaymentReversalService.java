@@ -15,7 +15,6 @@ import com.nequi.ticketing.application.port.out.ReversalExhaustionPlan;
 import com.nequi.ticketing.application.port.out.TransactionOutcome;
 import com.nequi.ticketing.domain.audit.AuditRecord.Actor;
 import com.nequi.ticketing.domain.audit.AuditRecord.ActorType;
-import com.nequi.ticketing.domain.event.ShardingPolicy;
 import com.nequi.ticketing.domain.order.Order;
 import java.time.Instant;
 import java.util.Objects;
@@ -59,7 +58,7 @@ public final class PaymentReversalService implements ReversePaymentsUseCase {
         return Mono.defer(() -> {
             Objects.requireNonNull(request, "request");
             Instant now = clock.now();
-            Flux<Optional<String>> candidates = Flux.fromIterable(request.shards(ShardingPolicy.REVERSAL_SHARDS))
+            Flux<Optional<String>> candidates = Flux.fromIterable(request.shards(settings.sharding().reversalShards()))
                     .concatMap(shard -> CycleSupport.guarded(orderReader.findDueReversals(shard, now)));
             return CycleSupport.summarize(CycleSupport.process(candidates,
                     orderId -> reverseOne(orderId, request.correlationId()), settings.reversalConcurrency()));
@@ -95,7 +94,7 @@ public final class PaymentReversalService implements ReversePaymentsUseCase {
 
     private Mono<ItemOutcome> reschedule(Order order, String correlationId) {
         Instant now = clock.now();
-        Order next = order.rescheduleReversal(now);
+        Order next = order.rescheduleReversal(now, settings.reversalSchedule());
         if (next.reversalPlan().exhausted()) {
             ReversalExhaustionPlan plan = new ReversalExhaustionPlan(order, next,
                     WorkerAudits.reversalExhausted(next, actor, correlationId, now));

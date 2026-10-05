@@ -1,6 +1,8 @@
 package com.nequi.ticketing.application.usecase;
 
 import com.nequi.ticketing.domain.event.InventoryLimits;
+import com.nequi.ticketing.domain.event.ShardingPolicy;
+import com.nequi.ticketing.domain.order.OrderRules;
 import java.time.Duration;
 import java.util.Objects;
 
@@ -8,7 +10,8 @@ import java.util.Objects;
  * Configurable values used by the {@code api} role use cases. {@link #DEPLOYED} holds the approved
  * defaults: ADR-024 / FG-002 inventory limits, ADR-027 idempotency retention, ADR-035 and IV-004
  * {@code Retry-After} values, OpenAPI v2 / ADR-040 page sizes and count cache age, IV-004 sold-out
- * probe concurrency. The bootstrap module binds them from configuration (INC-010).
+ * probe concurrency, the Order rules (maximum of 10 Tickets per Order, IV-012) and the sharding of ADR-022
+ * (IV-015). The bootstrap module binds them from configuration (INC-010).
  */
 public record ApiUseCaseSettings(
         InventoryLimits inventoryLimits,
@@ -21,7 +24,9 @@ public record ApiUseCaseSettings(
         int defaultAvailabilityPageSize,
         int maximumAvailabilityPageSize,
         Duration availableCountCacheTtl,
-        int soldOutProbeConcurrency) {
+        int soldOutProbeConcurrency,
+        OrderRules orderRules,
+        ShardingPolicy sharding) {
 
     public static final ApiUseCaseSettings DEPLOYED = new ApiUseCaseSettings(
             InventoryLimits.DEPLOYED,
@@ -34,10 +39,14 @@ public record ApiUseCaseSettings(
             50,
             100,
             Duration.ofSeconds(1),
-            8);
+            8,
+            OrderRules.DEPLOYED,
+            ShardingPolicy.DEPLOYED);
 
     public ApiUseCaseSettings {
         Objects.requireNonNull(inventoryLimits, "inventoryLimits");
+        Objects.requireNonNull(orderRules, "orderRules");
+        Objects.requireNonNull(sharding, "sharding");
         requirePositive(idempotencyRetention, "idempotencyRetention");
         requirePositive(conflictRetryAfter, "conflictRetryAfter");
         requirePositive(doubleFailureRetryAfter, "doubleFailureRetryAfter");

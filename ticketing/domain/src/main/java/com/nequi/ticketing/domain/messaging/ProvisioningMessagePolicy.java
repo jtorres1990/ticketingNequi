@@ -7,14 +7,23 @@ import com.nequi.ticketing.domain.event.Event.ProvisioningStatus;
 /** Pure ordered decisions from ticketing.messaging.v2 section 5.2. */
 public final class ProvisioningMessagePolicy {
 
-    /** ADR-024: missing Tickets are rewritten and verified again up to three times. */
+    /** ADR-024: missing Tickets are rewritten and verified again up to three times (approved, configurable). */
     public static final int MAXIMUM_REPAIRS = 3;
 
     private ProvisioningMessagePolicy() {
     }
 
+    /** {@link #decide(Snapshot, int)} with the approved maximum of three repairs. */
     public static Action decide(Snapshot snapshot) {
+        return decide(snapshot, MAXIMUM_REPAIRS);
+    }
+
+    /** Ordered rules of messaging v2 §5.2 with the configurable maximum of verification repairs (IV-015). */
+    public static Action decide(Snapshot snapshot, int maximumRepairs) {
         required(snapshot, "snapshot");
+        if (maximumRepairs < 0) {
+            throw new IllegalArgumentException("maximumRepairs cannot be negative");
+        }
         if (!snapshot.messageReadable() || !snapshot.eventPresent()) {
             return Action.POISON_KEEP_WITH_SHORT_VISIBILITY;
         }
@@ -37,7 +46,7 @@ public final class ProvisioningMessagePolicy {
             return Action.WRITE_NEXT_BATCH;
         }
         if (!snapshot.inventoryVerified()) {
-            if (snapshot.verificationAttempts() < MAXIMUM_REPAIRS) {
+            if (snapshot.verificationAttempts() < maximumRepairs) {
                 return Action.REPAIR_AND_VERIFY;
             }
             // ADR-024 section 3.9: a verification that keeps failing is a transient failure of the message.

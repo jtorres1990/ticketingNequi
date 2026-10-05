@@ -7,6 +7,7 @@ import static com.nequi.ticketing.infrastructure.adapter.out.dynamodb.Attributes
 
 import com.nequi.ticketing.application.port.out.OrderRecord;
 import com.nequi.ticketing.application.port.out.PaymentLease;
+import com.nequi.ticketing.domain.event.ShardingPolicy;
 import com.nequi.ticketing.domain.order.Order;
 import com.nequi.ticketing.domain.order.Order.FunctionalCause;
 import com.nequi.ticketing.domain.order.Order.OrderStatus;
@@ -68,7 +69,7 @@ final class OrderItems {
     }
 
     /** AP-008: new Order in {@code CREATED}, in the {@code RESV#} range of {@code GSI3} and in {@code GSI4}. */
-    static Map<String, AttributeValue> newOrder(Order order) {
+    static Map<String, AttributeValue> newOrder(Order order, ShardingPolicy sharding) {
         Reservation reservation = order.reservation();
         Instant createdAt = reservation.reservedAt();
         Map<String, AttributeValue> item = new HashMap<>(Keys.meta(Keys.order(order.orderId())));
@@ -85,9 +86,9 @@ final class OrderItems {
         item.put(RESERVED_AT, instant(reservation.reservedAt()));
         item.put(EXPIRES_AT, instant(reservation.expiresAt()));
         item.put(EXPIRES_AT_MS, millis(reservation.expiresAt()));
-        item.put(GSI3PK, s(Keys.reservations(order.orderId())));
+        item.put(GSI3PK, s(Keys.reservations(order.orderId(), sharding)));
         item.put(GSI3SK, s(Keys.millisSort(reservation.expiresAt(), order.orderId())));
-        item.put(GSI4PK, s(Keys.pendingEnqueue(order.orderId())));
+        item.put(GSI4PK, s(Keys.pendingEnqueue(order.orderId(), sharding)));
         item.put(GSI4SK, s(Keys.millisSort(createdAt, order.orderId())));
         return item;
     }

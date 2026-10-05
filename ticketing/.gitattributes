@@ -1,0 +1,11 @@
+# Line endings of the ticketing build (INC-010). The Maven Wrapper script must keep LF to run inside Linux
+# containers even when the repository is checked out with core.autocrlf=true; the Windows script keeps CRLF.
+mvnw text eol=lf
+*.cmd text eol=crlf
+*.sh text eol=lf
+
+# The OpenAPI contract copies are compared with the originals by SHA-256 (IV-003): never convert them.
+**/src/test/resources/contracts/** -text
+
+# Binary files of the build.
+*.jar binary

@@ -4,8 +4,9 @@ import reactor.blockhound.BlockHound;
 import reactor.blockhound.integration.BlockHoundIntegration;
 
 /**
- * The only BlockHound allowances of the build (NFR-003, plan §4.3), all for internals of the AWS SDK and
- * documented in the INC-005 report; no project code is exempted:
+ * BlockHound allowances for internals of the AWS SDK (NFR-003, plan §4.3), documented in the INC-005 report;
+ * no project code is exempted. The only other allowance of the build is a Netty buffer-allocator internal
+ * ({@code NettyAllocatorBlockHoundIntegration}, IV-022, INC-010):
  * <ul>
  *   <li>Request signing reuses {@code MessageDigest} instances from a {@code LinkedBlockingDeque} pool
  *       ({@code DigestAlgorithm#getDigest} takes one, {@code CloseableMessageDigest#close} returns it). The

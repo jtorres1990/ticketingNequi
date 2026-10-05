@@ -1,6 +1,10 @@
 package com.nequi.ticketing.application.usecase;
 
 import com.nequi.ticketing.domain.event.InventoryLimits;
+import com.nequi.ticketing.domain.event.ShardingPolicy;
+import com.nequi.ticketing.domain.messaging.ProvisioningMessagePolicy;
+import com.nequi.ticketing.domain.order.OrderRules;
+import com.nequi.ticketing.domain.order.ReversalSchedule;
 import java.time.Duration;
 import java.util.Objects;
 
@@ -11,8 +15,10 @@ import java.util.Objects;
  * stalled threshold (3 min) and maximum republications (3); ADR-026 sweep age (30 s); ADR-028
  * concurrencies 16 / 8 / 4 / 2. {@code workerId} identifies the worker instance (lease owner prefix and
  * audit actor, ADR-031). {@code maximumReevaluations} bounds the "re-read and re-evaluate" loop of one
- * message; exceeding it is treated as a transient failure. The bootstrap module binds them from
- * configuration (INC-010).
+ * message; exceeding it is treated as a transient failure. The domain rules declared configurable by plan
+ * Annex A are also carried here (IV-015): the Order rules (payment cutoff margin of 15 s), the reversal
+ * schedule of ADR-025 (10 attempts), the maximum of verification repairs of ADR-024 (3) and the sharding of
+ * ADR-022. The bootstrap module binds them from configuration (INC-010).
  */
 public record WorkerUseCaseSettings(
         String workerId,
@@ -27,7 +33,11 @@ public record WorkerUseCaseSettings(
         int republishConcurrency,
         int reversalConcurrency,
         int cleanupConcurrency,
-        int maximumReevaluations) {
+        int maximumReevaluations,
+        OrderRules orderRules,
+        ReversalSchedule reversalSchedule,
+        int maximumVerificationRepairs,
+        ShardingPolicy sharding) {
 
     public WorkerUseCaseSettings {
         Objects.requireNonNull(workerId, "workerId");
@@ -38,10 +48,14 @@ public record WorkerUseCaseSettings(
         requirePositive(authorizationMargin, "authorizationMargin");
         requirePositive(provisioningLeaseDuration, "provisioningLeaseDuration");
         Objects.requireNonNull(inventoryLimits, "inventoryLimits");
+        Objects.requireNonNull(orderRules, "orderRules");
+        Objects.requireNonNull(reversalSchedule, "reversalSchedule");
+        Objects.requireNonNull(sharding, "sharding");
         requirePositive(stalledProvisioningThreshold, "stalledProvisioningThreshold");
         requirePositive(republishAge, "republishAge");
         if (maximumProvisioningRepublications < 0 || expirationConcurrency < 1 || republishConcurrency < 1
-                || reversalConcurrency < 1 || cleanupConcurrency < 1 || maximumReevaluations < 1) {
+                || reversalConcurrency < 1 || cleanupConcurrency < 1 || maximumReevaluations < 1
+                || maximumVerificationRepairs < 0) {
             throw new IllegalArgumentException("counts and concurrencies must be positive");
         }
     }
@@ -60,7 +74,11 @@ public record WorkerUseCaseSettings(
                 8,
                 4,
                 2,
-                5);
+                5,
+                OrderRules.DEPLOYED,
+                ReversalSchedule.DEPLOYED,
+                ProvisioningMessagePolicy.MAXIMUM_REPAIRS,
+                ShardingPolicy.DEPLOYED);
     }
 
     private static void requirePositive(Duration value, String name) {

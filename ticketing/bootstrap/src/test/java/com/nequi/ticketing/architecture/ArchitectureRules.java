@@ -158,6 +158,61 @@ final class ArchitectureRules {
                 .because("ADR-034 requires use cases to reach infrastructure through outbound ports");
     }
 
+    /**
+     * Shortcuts of the domain that apply the approved default instead of the configured value (IV-012, IV-015).
+     * Owner, name and parameter types: only the domain itself (and tests) may use them.
+     */
+    private static final Set<String> APPROVED_DEFAULT_SHORTCUTS = Set.of(
+            "com.nequi.ticketing.domain.order.Order.startPayment(java.time.Instant)",
+            "com.nequi.ticketing.domain.order.Order.rescheduleReversal(java.time.Instant)",
+            "com.nequi.ticketing.domain.order.ReversalPlan.reschedule(java.time.Instant)",
+            "com.nequi.ticketing.domain.order.PurchaseRequest.<init>(java.lang.String, java.util.List, java.lang.String)",
+            "com.nequi.ticketing.domain.messaging.OrderMessagePolicy.decide("
+                    + "com.nequi.ticketing.domain.messaging.OrderMessagePolicy$Snapshot, java.time.Instant)",
+            "com.nequi.ticketing.domain.messaging.ProvisioningMessagePolicy.decide("
+                    + "com.nequi.ticketing.domain.messaging.ProvisioningMessagePolicy$Snapshot)",
+            "com.nequi.ticketing.domain.event.ShardingPolicy.availabilityShards(int)",
+            "com.nequi.ticketing.domain.event.Event.create(java.lang.String, java.lang.String, java.lang.String, "
+                    + "java.time.Instant, int, com.nequi.ticketing.domain.event.InventoryDefinition, java.time.Instant, "
+                    + "com.nequi.ticketing.domain.event.InventoryLimits)",
+            "com.nequi.ticketing.infrastructure.adapter.in.scheduler.PeriodicProcess.shardCount()",
+            "com.nequi.ticketing.infrastructure.adapter.in.scheduler.WorkerSchedulerSettings.<init>("
+                    + "com.nequi.ticketing.infrastructure.adapter.in.scheduler.PeriodicProcessSettings, "
+                    + "com.nequi.ticketing.infrastructure.adapter.in.scheduler.PeriodicProcessSettings, "
+                    + "com.nequi.ticketing.infrastructure.adapter.in.scheduler.PeriodicProcessSettings, "
+                    + "com.nequi.ticketing.infrastructure.adapter.in.scheduler.PeriodicProcessSettings)");
+
+    static ArchRule configuredRulesAreUsedOutsideTheDomain() {
+        return noClasses()
+                .that().resideOutsideOfPackage("..domain..")
+                .and().doNotHaveFullyQualifiedName(
+                        "com.nequi.ticketing.infrastructure.adapter.in.scheduler.WorkerSchedulerSettings")
+                .and().doNotHaveFullyQualifiedName(
+                        "com.nequi.ticketing.infrastructure.adapter.in.scheduler.PeriodicProcess")
+                .should(callCodeUnits(APPROVED_DEFAULT_SHORTCUTS))
+                .because("IV-012 and IV-015 make the maximum of Tickets, the payment cutoff, the reversal schedule, "
+                        + "the verification repairs and the shards configurable: production code must pass the "
+                        + "configured value, never the approved-default shortcut of the domain");
+    }
+
+    private static ArchCondition<JavaClass> callCodeUnits(Set<String> codeUnits) {
+        return new ArchCondition<>("call an approved-default shortcut") {
+            @Override
+            public void check(JavaClass javaClass, ConditionEvents events) {
+                javaClass.getCodeUnitCallsFromSelf().forEach(call -> {
+                    var target = call.getTarget();
+                    String signature = target.getOwner().getName() + "." + target.getName() + "("
+                            + String.join(", ", target.getRawParameterTypes().stream()
+                                    .map(JavaClass::getName).toList()) + ")";
+                    if (codeUnits.contains(signature)) {
+                        events.add(SimpleConditionEvent.satisfied(call,
+                                javaClass.getName() + " calls the approved-default shortcut " + signature));
+                    }
+                });
+            }
+        };
+    }
+
     static ArchRule noBlockingCalls() {
         return classes().should(notCallMethods(BLOCKING_METHODS, "known blocking"));
     }

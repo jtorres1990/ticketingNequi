@@ -27,7 +27,7 @@ import software.amazon.awssdk.services.dynamodb.model.TimeToLiveSpecification;
  * table fixture of {@code ticketing.data-model.v2.md} §2. The application never creates tables (data
  * model §7); only this fixture does, mirroring what {@code infra-init} creates locally (ADR-036).
  */
-final class DynamoDbLocalSupport {
+public final class DynamoDbLocalSupport {
 
     static final DockerImageName IMAGE = DockerImageName.parse("amazon/dynamodb-local:3.3.1");
 
@@ -48,7 +48,7 @@ final class DynamoDbLocalSupport {
         return CONTAINER;
     }
 
-    static URI endpoint() {
+    public static URI endpoint() {
         GenericContainer<?> running = container();
         return URI.create("http://" + running.getHost() + ":" + running.getMappedPort(8000));
     }
@@ -63,12 +63,12 @@ final class DynamoDbLocalSupport {
     }
 
     /** DynamoDB Local and LocalStack accept any credentials; these are placeholders, not secrets. */
-    static StaticCredentialsProvider localCredentials() {
+    public static StaticCredentialsProvider localCredentials() {
         return StaticCredentialsProvider.create(AwsBasicCredentials.create("local", "local"));
     }
 
     /** Creates a fresh table with the keys, sparse GSIs and TTL of the data model; returns its name. */
-    static String createTable() {
+    public static String createTable() {
         String tableName = "ticketing-it-" + UUID.randomUUID();
         createTable(client(), tableName);
         return tableName;

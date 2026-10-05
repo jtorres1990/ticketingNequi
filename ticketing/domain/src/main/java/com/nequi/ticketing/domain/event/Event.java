@@ -16,6 +16,8 @@ public record Event(
         int availabilityShards,
         ProvisioningStatus provisioningStatus) {
 
+    /** {@link #create(String, String, String, Instant, int, InventoryDefinition, Instant, InventoryLimits,
+     * ShardingPolicy)} with the approved sharding (ADR-022). */
     public static Event create(
             String eventId,
             String name,
@@ -25,6 +27,20 @@ public record Event(
             InventoryDefinition definition,
             Instant now,
             InventoryLimits limits) {
+        return create(eventId, name, venue, startsAt, capacity, definition, now, limits, ShardingPolicy.DEPLOYED);
+    }
+
+    public static Event create(
+            String eventId,
+            String name,
+            String venue,
+            Instant startsAt,
+            int capacity,
+            InventoryDefinition definition,
+            Instant now,
+            InventoryLimits limits,
+            ShardingPolicy sharding) {
+        required(sharding, "sharding");
         required(eventId, "eventId");
         required(name, "name");
         required(venue, "venue");
@@ -35,7 +51,7 @@ public record Event(
             throw new ValidationException("startsAt", "startsAt must be in the future");
         }
         return new Event(eventId, name, venue, startsAt, capacity, definition,
-                ShardingPolicy.availabilityShards(capacity), ProvisioningStatus.PROVISIONING);
+                sharding.availabilityShardsFor(capacity), ProvisioningStatus.PROVISIONING);
     }
 
     public Event enable(int verifiedTicketCount) {

@@ -48,6 +48,13 @@ import org.junit.jupiter.api.Test;
 
 class WorkerPortContractModelTest {
 
+    private static final com.nequi.ticketing.domain.order.OrderRules RULES =
+            com.nequi.ticketing.domain.order.OrderRules.DEPLOYED;
+    private static final com.nequi.ticketing.domain.order.ReversalSchedule SCHEDULE =
+            com.nequi.ticketing.domain.order.ReversalSchedule.DEPLOYED;
+    private static final com.nequi.ticketing.domain.event.ShardingPolicy SHARDING =
+            com.nequi.ticketing.domain.event.ShardingPolicy.DEPLOYED;
+
     private static final Order ORDER = Order.create("order-1", CUSTOMER_A,
             new PurchaseRequest(EVENT_ID, List.of("A-1-1"), ApiFixture.key(1)), NOW);
     private static final Order OTHER = Order.create("order-2", CUSTOMER_A,
@@ -215,12 +222,19 @@ class WorkerPortContractModelTest {
         assertThatThrownBy(() -> WorkerUseCaseSettings.deployed(" ")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new WorkerUseCaseSettings("w", Duration.ZERO, Duration.ofSeconds(2),
                 Duration.ofSeconds(60), InventoryLimits.DEPLOYED, Duration.ofMinutes(3), 3, Duration.ofSeconds(30),
-                16, 8, 4, 2, 5)).isInstanceOf(IllegalArgumentException.class);
+                16, 8, 4, 2, 5, RULES, SCHEDULE, 3, SHARDING)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new WorkerUseCaseSettings("w", Duration.ofSeconds(45), Duration.ofSeconds(2),
                 Duration.ofSeconds(60), InventoryLimits.DEPLOYED, Duration.ofMinutes(3), 3, Duration.ofSeconds(30),
-                0, 8, 4, 2, 5)).isInstanceOf(IllegalArgumentException.class);
+                0, 8, 4, 2, 5, RULES, SCHEDULE, 3, SHARDING)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new WorkerUseCaseSettings("w", Duration.ofSeconds(45), Duration.ofSeconds(2),
                 Duration.ofSeconds(60), InventoryLimits.DEPLOYED, Duration.ofMinutes(3), -1, Duration.ofSeconds(30),
-                16, 8, 4, 2, 5)).isInstanceOf(IllegalArgumentException.class);
+                16, 8, 4, 2, 5, RULES, SCHEDULE, 3, SHARDING)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new WorkerUseCaseSettings("w", Duration.ofSeconds(45), Duration.ofSeconds(2),
+                Duration.ofSeconds(60), InventoryLimits.DEPLOYED, Duration.ofMinutes(3), 3, Duration.ofSeconds(30),
+                16, 8, 4, 2, 5, RULES, SCHEDULE, -1, SHARDING)).isInstanceOf(IllegalArgumentException.class);
+        assertThat(settings.orderRules()).isEqualTo(RULES);
+        assertThat(settings.reversalSchedule()).isEqualTo(SCHEDULE);
+        assertThat(settings.maximumVerificationRepairs()).isEqualTo(3);
+        assertThat(settings.sharding()).isEqualTo(SHARDING);
     }
 }
