@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.nequi.ticketing.architecture.fixture.domain.ForbiddenBlockingFixture;
 import com.nequi.ticketing.architecture.fixture.domain.ForbiddenDomainFixture;
+import com.nequi.ticketing.architecture.fixture.infrastructure.adapter.in.scheduler.ForbiddenSchedulerFixture;
 import com.nequi.ticketing.architecture.fixture.infrastructure.adapter.out.payment.ForbiddenPaymentFixture;
 import com.nequi.ticketing.architecture.fixture.infrastructure.adapter.out.sqs.ForbiddenRateLimiterFixture;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
@@ -45,6 +46,16 @@ class ArchitectureRuleControlTest {
         assertThatThrownBy(() -> ArchitectureRules.webServerAndSecurityTypesStayInTheWebAdapter().check(fixture))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("org.springframework.security.core.Authentication");
+    }
+
+    @Test
+    @DisplayName("ADR-028 control detects a periodic scheduler type that reads the circuit breaker instead of the gate")
+    void schedulerRuleDetectsAForeignDependency() {
+        var fixture = new ClassFileImporter().importClasses(ForbiddenSchedulerFixture.class);
+
+        assertThatThrownBy(() -> ArchitectureRules.periodicSchedulerTriggersOnlyInboundPorts().check(fixture))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("ManagedCircuitBreaker");
     }
 
     @Test

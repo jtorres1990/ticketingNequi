@@ -127,6 +127,23 @@ final class ArchitectureRules {
                         + "HTTP contract of the Payment Mock (no code shared with payment-mock)");
     }
 
+    static ArchRule periodicSchedulerTriggersOnlyInboundPorts() {
+        DescribedPredicate<JavaClass> allowed = JavaClass.Predicates
+                .resideInAnyPackage("java..", "reactor..", "org.reactivestreams..",
+                        "com.nequi.ticketing.application.port.in..",
+                        "com.nequi.ticketing.domain.event..",
+                        "com.nequi.ticketing.infrastructure.adapter.in.scheduler..")
+                .or(HasName.Predicates.nameMatching(
+                        ".*\\.infrastructure\\.adapter\\.in\\.sqs\\.ConsumptionGate(\\$.*)?").forSubtype())
+                .as("Java, Reactor, inbound ports, the shard counts of the domain and the consumption gate");
+        return classes()
+                .that().resideInAPackage("..infrastructure.adapter.in.scheduler..")
+                .should().onlyDependOnClassesThat(allowed)
+                .because("ADR-028 and ADR-034: the periodic scheduler (CMP-014) only triggers the inbound ports of "
+                        + "the worker processes; the reversal pause follows the consumption gate driven by the "
+                        + "Payment Mock circuit, never the circuit breaker or an adapter directly");
+    }
+
     static ArchRule inboundAdaptersUseOnlyInboundPorts() {
         return noClasses()
                 .that().resideInAPackage("..infrastructure.adapter.in..")

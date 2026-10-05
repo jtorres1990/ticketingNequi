@@ -43,6 +43,10 @@ class CleanArchitectureTest {
             ArchitectureRules.paymentAdapterKnowsOnlyTheHttpContract();
 
     @ArchTest
+    static final ArchRule PERIODIC_SCHEDULER_TRIGGERS_ONLY_INBOUND_PORTS =
+            ArchitectureRules.periodicSchedulerTriggersOnlyInboundPorts();
+
+    @ArchTest
     static final ArchRule INBOUND_ADAPTERS_USE_ONLY_INBOUND_PORTS = ArchitectureRules.inboundAdaptersUseOnlyInboundPorts();
 
     @ArchTest
