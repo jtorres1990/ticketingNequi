@@ -56,11 +56,33 @@ final class ArchitectureRules {
     }
 
     static ArchRule retryAndCircuitBreakerStayInOutboundAdapters() {
+        DescribedPredicate<JavaClass> resilienceExceptRateLimiter = JavaClass.Predicates
+                .resideInAnyPackage("reactor.util.retry..", "io.github.resilience4j..")
+                .and(DescribedPredicate.not(JavaClass.Predicates.resideInAPackage("io.github.resilience4j.ratelimiter..")))
+                .as("Reactor retry or Resilience4j types other than the rate limiter of the request guard");
         return noClasses()
                 .that().resideOutsideOfPackage("..infrastructure.adapter.out..")
-                .should().dependOnClassesThat().resideInAnyPackage(
-                        "reactor.util.retry..", "io.github.resilience4j..")
+                .should().dependOnClassesThat(resilienceExceptRateLimiter)
                 .because("ADR-035 locates retry and circuit breakers in outbound infrastructure adapters");
+    }
+
+    static ArchRule rateLimiterStaysInTheRequestGuard() {
+        return noClasses()
+                .that().resideOutsideOfPackage("..infrastructure.adapter.in.web..")
+                .should().dependOnClassesThat().resideInAnyPackage("io.github.resilience4j.ratelimiter..")
+                .because("ADR-032 places the per-subject rate limiter of API-004 in the request guard (CMP-017) "
+                        + "of the HTTP adapter");
+    }
+
+    static ArchRule webServerAndSecurityTypesStayInTheWebAdapter() {
+        return noClasses()
+                .that().resideOutsideOfPackages("..infrastructure.adapter.in.web..", "..bootstrap..")
+                .should().dependOnClassesThat().resideInAnyPackage(
+                        "org.springframework.security..",
+                        "org.springframework.web.server..",
+                        "org.springframework.web.reactive.function.server..")
+                .because("ADR-034 confines the HTTP entrypoint (CMP-001), security (CMP-002), error translation "
+                        + "(CMP-016) and request guard (CMP-017) to the inbound web adapter; composition is bootstrap");
     }
 
     static ArchRule awsSdkTypesStayInAwsAdapters() {

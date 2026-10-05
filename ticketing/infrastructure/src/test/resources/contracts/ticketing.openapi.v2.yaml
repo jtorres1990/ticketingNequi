@@ -1,0 +1,967 @@
+openapi: 3.0.3
+
+info:
+  title: Ticketing Event Processing API
+  version: 2.0.0
+  description: |
+    HTTP contract of the Ticketing Event Processing Platform.
+
+    Status: ACCEPTED (architecture version 2, consolidated after the approved
+    Human Architecture Review). Supersedes architecture/ticketing.openapi.yaml
+    (version 1), which remains unchanged.
+    Source of truth: feature-spec/ticketing.feature-spec.v4.md plus the
+    approved decisions in human-review/ticketing.architecture-review.yaml.
+    Behaviour that changes the functional specification is registered in
+    architecture/ticketing.functional-clarifications.v1.md.
+
+    Conventions:
+    - Every operation carries its stable identifier in `x-id` and its anchors
+      in `x-source-ids`; `x-related-adrs` lists the governing decisions.
+    - All timestamps are ISO-8601 instants in UTC.
+    - Errors use Problem Details (`application/problem+json`) with a stable
+      `code` and a `traceId` (ADR-035).
+    - Numeric limits are configurable values deployed for this
+      implementation, not production guarantees.
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local environment (Docker Compose)
+
+tags:
+  - name: Events
+    description: Event creation, provisioning status, catalog and availability
+  - name: Orders
+    description: Purchase initiation and Order status
+
+security:
+  - cognitoJwt: []
+
+paths:
+
+  /events:
+    post:
+      operationId: createEvent
+      x-id: API-001
+      x-source-ids: [MF-001, FR-001, FR-003, FR-017, FR-018, FR-019, BR-016, BR-021, VAL-006, VAL-007, VAL-008, VAL-009, AC-001, AC-017, AC-026, AC-028, FG-002, AV-002]
+      x-required-authority: ADMIN
+      x-related-adrs: [ADR-024, ADR-027, ADR-032, ADR-035]
+      tags: [Events]
+      summary: Request the creation of an Event from a compact inventory definition
+      description: |
+        Validates the whole request, creates the Event in the technical
+        provisioning phase `PROVISIONING` and enqueues its asynchronous
+        provisioning. Responds immediately with the `eventId` and the
+        provisioning status; the Event becomes visible and purchasable only
+        when it reaches `ENABLED`, after the server has written and verified
+        exactly `capacity` tickets.
+
+        The inventory is described by a compact definition (sections, rows,
+        seats per row and complimentary seat ranges). The server derives each
+        `ticketId` deterministically as `<section>-<row>-<seat>`. Complimentary
+        seats are created directly in `COMPLIMENTARY`; all others in
+        `AVAILABLE`. Complimentary tickets cannot be added or converted after
+        creation.
+
+        An invalid request, or one whose capacity exceeds 50,000, is rejected
+        completely and nothing is written.
+
+        Idempotency: `Idempotency-Key` identifies the operation for the
+        authenticated ADMIN. A replay with the same content returns the same
+        `eventId` with its current provisioning status and creates nothing.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEventRequest'
+      responses:
+        '202':
+          description: Event accepted in `PROVISIONING`; provisioning was requested.
+          headers:
+            Location:
+              description: Relative URL of the provisioning status (`API-006`).
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventProvisioningStatus'
+        '200':
+          description: |
+            Idempotent replay. The Event already exists for this key; its current
+            provisioning status is returned and nothing is created or enqueued.
+          headers:
+            Idempotency-Replayed:
+              description: Always `true` on a replay.
+              schema:
+                type: boolean
+            Location:
+              description: Relative URL of the provisioning status (`API-006`).
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventProvisioningStatus'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          description: |
+            `IDEMPOTENCY_KEY_REUSED`: the key was already used by the same ADMIN
+            for a different request. Nothing was created.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+    get:
+      operationId: listEvents
+      x-id: API-002
+      x-source-ids: [MF-002, FR-002, FR-018, FR-019, BR-012, BR-022, AC-002, AC-028, AV-001, AV-002, AV-005]
+      x-required-authority: ADMIN or CUSTOMER
+      x-related-adrs: [ADR-040, ADR-032, ADR-024]
+      tags: [Events]
+      summary: List future enabled Events
+      description: |
+        Returns Events in `ENABLED` whose start instant is in the future,
+        ordered by start instant ascending. Sold-out Events are included and
+        flagged with `soldOut`; the exact available quantity is provided by
+        `API-003`. Past Events and Events not in `ENABLED` are not returned.
+        Informative.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Page of future enabled Events.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventPage'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /events/{eventId}/provisioning:
+    get:
+      operationId: getEventProvisioningStatus
+      x-id: API-006
+      x-source-ids: [FR-001, FR-018, FR-019, AC-001, AC-028, AV-002, AV-005, FG-002]
+      x-required-authority: ADMIN
+      x-related-adrs: [ADR-024, ADR-032, ADR-035]
+      tags: [Events]
+      summary: Get the provisioning status of an Event
+      description: |
+        Returns the technical provisioning lifecycle of any Event
+        (`PROVISIONING`, `ENABLED` or `FAILED`) with its progress. Available to
+        ADMIN only. Customers never observe Events that are not `ENABLED`.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+      responses:
+        '200':
+          description: Current provisioning status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventProvisioningStatus'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/EventNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /events/{eventId}/availability:
+    get:
+      operationId: getEventAvailability
+      x-id: API-003
+      x-source-ids: [MF-002, FR-003, FR-012, FR-018, FR-019, BR-012, BR-018, AC-010, AC-018, AC-028, AC-030, FG-002, FG-005, AV-005]
+      x-required-authority: ADMIN or CUSTOMER
+      x-related-adrs: [ADR-040, ADR-022, ADR-032, ADR-035]
+      tags: [Events]
+      summary: Get the current availability of an Event
+      description: |
+        Returns the number of tickets currently in `AVAILABLE` and one page of
+        tickets in `AVAILABLE`, optionally filtered by section. Tickets in other
+        states are not listed. The response is an informative snapshot read on
+        demand (`generatedAt` is the instant of the count, which may be cached
+        for up to 1 second); it does not guarantee acquisition and availability
+        is revalidated when a purchase is started. Never creates a Reservation.
+
+        Past Events keep answering informatively. Events not in `ENABLED` are
+        reported as not found for any role.
+
+        Page order: stable for a given cursor, not globally sorted by section.
+      parameters:
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/Section'
+        - $ref: '#/components/parameters/PageSize'
+        - $ref: '#/components/parameters/AvailabilityCursor'
+      responses:
+        '200':
+          description: Current availability snapshot.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventAvailability'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/EventNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /orders:
+    post:
+      operationId: startPurchase
+      x-id: API-004
+      x-source-ids: [MF-003, FR-004, FR-005, FR-006, FR-010, FR-016, FR-017, FR-018, FR-019, BR-013, BR-014, BR-019, BR-022, VAL-002, VAL-010, VAL-011, ALT-002, ALT-003, ALT-006, ERR-001, ERR-002, ERR-007, AC-003, AC-004, AC-007, AC-016, AC-022, AC-028, AC-031, FG-001, FG-004, FG-005, AV-004, AV-005]
+      x-required-authority: CUSTOMER
+      x-related-adrs: [ADR-023, ADR-003, ADR-026, ADR-027, ADR-032, ADR-035]
+      tags: [Orders]
+      summary: Formally start a purchase
+      description: |
+        Revalidates and atomically reserves all requested tickets (1 to 10,
+        without repetitions) of a single Event, creates the Order in `CREATED`
+        with its Reservation (valid for at most ten minutes) and enqueues it for
+        asynchronous payment processing. Returns the Order identifier without
+        waiting for the payment.
+
+        All-or-nothing: if any requested ticket is not available, does not
+        exist, the Event is not on sale, the customer already has an active
+        Order for the same Event, or the queue is unavailable (circuit open),
+        the whole request is rejected and no Reservation, Order or Order
+        identifier is created and the inventory is not modified.
+
+        A customer may hold at most one Order in `CREATED` per Event.
+
+        The owner is derived from the JWT; the request carries no user
+        identifier and no payment selector.
+
+        Idempotency: `Idempotency-Key` identifies the operation for the
+        authenticated customer. Repeating it with the same content returns the
+        existing Order; a repetition of a request that was rejected is
+        processed again as a new request.
+
+        Error precedence: validation (400); idempotency replay (200) or reused
+        key (422); `EVENT_NOT_FOUND` (404); `EVENT_NOT_ON_SALE` (409);
+        `UNKNOWN_TICKETS` (422); `SERVICE_UNAVAILABLE` with open circuit (503);
+        then, from the reservation, `ACTIVE_ORDER_EXISTS`, `UNKNOWN_TICKETS`,
+        `TICKETS_UNAVAILABLE`.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartPurchaseRequest'
+      responses:
+        '201':
+          description: |
+            The Order was created consistently and is queryable. `status` is
+            `CREATED` when accepted for asynchronous processing, or `FAILED`
+            (cause `PROCESSING_UNAVAILABLE`) when enqueueing failed definitively
+            and the Reservation was reverted.
+          headers:
+            Location:
+              description: Relative URL of the created Order.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '200':
+          description: |
+            Idempotent replay. The existing Order is returned in its current
+            state and no effect is repeated.
+          headers:
+            Idempotency-Replayed:
+              description: Always `true` on a replay.
+              schema:
+                type: boolean
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/EventNotFound'
+        '409':
+          description: |
+            Rejected; nothing was created and the inventory was not modified.
+            `code` is `TICKETS_UNAVAILABLE` (at least one ticket is not
+            `AVAILABLE`), `EVENT_NOT_ON_SALE` (the Event start instant is at or
+            before the current server instant) or `ACTIVE_ORDER_EXISTS` (the
+            customer already has an Order in `CREATED` for this Event).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/PurchaseConflictProblem'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '422':
+          description: |
+            Rejected; nothing was created. `code` is `UNKNOWN_TICKETS` (at least
+            one ticket does not exist in the Event) or `IDEMPOTENCY_KEY_REUSED`
+            (the key was already used by the same customer for a different
+            request).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/UnknownTicketsProblem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/PurchaseServiceUnavailable'
+
+  /orders/{orderId}:
+    get:
+      operationId: getOrder
+      x-id: API-005
+      x-source-ids: [MF-004, FR-009, FR-018, FR-019, BR-023, VAL-011, ALT-007, ERR-006, ERR-009, AC-006, AC-027, AC-028]
+      x-required-authority: CUSTOMER (owner only)
+      x-related-adrs: [ADR-032, ADR-035, ADR-025]
+      tags: [Orders]
+      summary: Get the state of an own Order
+      description: |
+        Returns the current state of an Order owned by the authenticated
+        customer, read from the Order alone with strong consistency (it does
+        not compose the individual ticket states). Includes terminal Orders and
+        a functional cause when the Order did not end successfully.
+
+        A non-existent Order and an Order of another customer produce exactly
+        the same response.
+      parameters:
+        - $ref: '#/components/parameters/OrderId'
+      responses:
+        '200':
+          description: Current state of the Order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/OrderNotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+components:
+
+  securitySchemes:
+    cognitoJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Access token issued by Amazon Cognito (a local OIDC issuer with the same
+        claims in the local environment). Roles come from `cognito:groups`
+        (`ADMIN`, `CUSTOMER`). See ADR-032 and ADR-033.
+
+  parameters:
+    EventId:
+      name: eventId
+      in: path
+      required: true
+      description: Server-generated Event identifier.
+      schema:
+        type: string
+        format: uuid
+    OrderId:
+      name: orderId
+      in: path
+      required: true
+      description: |
+        Order identifier. A malformed identifier yields the same response as a
+        non-existent Order.
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Client-generated key identifying the operation for the authenticated
+        identity (customer for purchases, ADMIN for Event creation). Retained
+        for at least 24 hours.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 64
+        pattern: '^[A-Za-z0-9_-]+$'
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of Events to return.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Opaque cursor returned by a previous page. An invalid cursor yields `VALIDATION_ERROR`.
+      schema:
+        type: string
+        maxLength: 1024
+    Section:
+      name: section
+      in: query
+      required: false
+      description: |
+        Section code of the Event inventory definition. Restricts the page to
+        that section. An unknown section yields `VALIDATION_ERROR`.
+      schema:
+        $ref: '#/components/schemas/SectionCode'
+    PageSize:
+      name: pageSize
+      in: query
+      required: false
+      description: Maximum number of available tickets in the page.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    AvailabilityCursor:
+      name: cursor
+      in: query
+      required: false
+      description: |
+        Opaque cursor returned by a previous availability page for the same
+        Event and section filter. An invalid cursor, or one issued for another
+        Event or filter, yields `VALIDATION_ERROR`.
+      schema:
+        type: string
+        maxLength: 512
+
+  schemas:
+
+    TicketState:
+      type: string
+      description: Ticket states DS-001 to DS-005. A ticket has exactly one.
+      enum: [AVAILABLE, RESERVED, PENDING_CONFIRMATION, SOLD, COMPLIMENTARY]
+
+    OrderStatus:
+      type: string
+      description: Order states DS-006 to DS-010.
+      enum: [CREATED, CONFIRMED, REJECTED, FAILED, EXPIRED]
+
+    ProvisioningStatus:
+      type: string
+      description: |
+        Technical provisioning lifecycle of an Event (AV-002). `ENABLED` means
+        creation completed; it is the only status visible to customers.
+        Not a Ticket or Order state.
+      enum: [PROVISIONING, ENABLED, FAILED]
+
+    SectionCode:
+      type: string
+      minLength: 1
+      maxLength: 8
+      pattern: '^[A-Za-z0-9]+$'
+
+    RowLabel:
+      type: string
+      minLength: 1
+      maxLength: 6
+      pattern: '^[A-Za-z0-9]+$'
+
+    TicketId:
+      type: string
+      description: |
+        Ticket identifier, unique within its Event, generated by the server as
+        `<section>-<row>-<seat>`.
+      minLength: 5
+      maxLength: 24
+      pattern: '^[A-Za-z0-9]{1,8}-[A-Za-z0-9]{1,6}-[0-9]{1,4}$'
+
+    CreateEventRequest:
+      type: object
+      additionalProperties: false
+      required: [name, venue, startsAt, capacity, inventory]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Must not be blank (VAL-006).
+        venue:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: Must not be blank (VAL-006).
+        startsAt:
+          type: string
+          format: date-time
+          description: Event instant, interpreted in UTC; must be in the future (VAL-007).
+        capacity:
+          type: integer
+          minimum: 1
+          maximum: 50000
+          description: |
+            Total capacity (VAL-008, FG-002). Must equal the number of seats
+            derived from `inventory`, complimentary included (VAL-009, BR-021).
+        inventory:
+          $ref: '#/components/schemas/InventoryDefinition'
+
+    InventoryDefinition:
+      type: object
+      additionalProperties: false
+      required: [sections]
+      description: |
+        Compact inventory definition. Limits (configurable): up to 100
+        sections, up to 2,000 rows in total, up to 1,000 seats per row, up to
+        500 complimentary ranges.
+      properties:
+        sections:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SectionDefinition'
+        complimentary:
+          type: array
+          maxItems: 500
+          description: |
+            Seat ranges created in `COMPLIMENTARY` (BR-016). Must exist in the
+            definition and must not overlap.
+          items:
+            $ref: '#/components/schemas/SeatRange'
+
+    SectionDefinition:
+      type: object
+      additionalProperties: false
+      required: [code, rows]
+      properties:
+        code:
+          $ref: '#/components/schemas/SectionCode'
+        rows:
+          type: array
+          minItems: 1
+          maxItems: 2000
+          description: Row labels must be unique within the section.
+          items:
+            $ref: '#/components/schemas/RowDefinition'
+
+    RowDefinition:
+      type: object
+      additionalProperties: false
+      required: [label, seats]
+      properties:
+        label:
+          $ref: '#/components/schemas/RowLabel'
+        seats:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: Seats are numbered from 1 to `seats`.
+
+    SeatRange:
+      type: object
+      additionalProperties: false
+      required: [section, row, fromSeat, toSeat]
+      properties:
+        section:
+          $ref: '#/components/schemas/SectionCode'
+        row:
+          $ref: '#/components/schemas/RowLabel'
+        fromSeat:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        toSeat:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          description: Inclusive; must be greater than or equal to `fromSeat`.
+
+    EventProvisioningStatus:
+      type: object
+      required: [eventId, provisioningStatus, capacity, createdAt]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        provisioningStatus:
+          $ref: '#/components/schemas/ProvisioningStatus'
+        capacity:
+          type: integer
+        complimentaryTickets:
+          type: integer
+          description: Tickets defined as `COMPLIMENTARY`.
+        provisionedTickets:
+          type: integer
+          description: Tickets written so far (progress); equals `capacity` when `ENABLED`.
+        createdAt:
+          type: string
+          format: date-time
+        enabledAt:
+          type: string
+          format: date-time
+          nullable: true
+        failedAt:
+          type: string
+          format: date-time
+          nullable: true
+        failureCause:
+          type: string
+          nullable: true
+          enum: [PROVISIONING_FAILED]
+          description: Present when `FAILED`; functional, without technical detail.
+
+    EventSummary:
+      type: object
+      required: [eventId, name, venue, startsAt, capacity, soldOut]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        venue:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+        soldOut:
+          type: boolean
+          description: |
+            True when the Event currently has zero tickets in `AVAILABLE`
+            (commercial availability zero). Informative (AV-001).
+
+    EventPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventSummary'
+        nextCursor:
+          type: string
+          nullable: true
+
+    AvailableTicket:
+      type: object
+      required: [ticketId, section, row, seat]
+      properties:
+        ticketId:
+          $ref: '#/components/schemas/TicketId'
+        section:
+          $ref: '#/components/schemas/SectionCode'
+        row:
+          $ref: '#/components/schemas/RowLabel'
+        seat:
+          type: integer
+
+    EventAvailability:
+      type: object
+      required: [eventId, name, venue, startsAt, capacity, sections, availableCount, generatedAt, informative, items]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        venue:
+          type: string
+        startsAt:
+          type: string
+          format: date-time
+        capacity:
+          type: integer
+        sections:
+          type: array
+          description: Section codes of the inventory definition, usable as `section` filter.
+          items:
+            $ref: '#/components/schemas/SectionCode'
+        availableCount:
+          type: integer
+          description: |
+            Number of tickets in `AVAILABLE` for the whole Event (BR-012),
+            computed from the tickets at `generatedAt`.
+        generatedAt:
+          type: string
+          format: date-time
+          description: Instant of the count (cached up to 1 second).
+        informative:
+          type: boolean
+          description: Always true. The snapshot does not guarantee acquisition (BR-018).
+        sectionFilter:
+          allOf:
+            - $ref: '#/components/schemas/SectionCode'
+          nullable: true
+        items:
+          type: array
+          description: One page of tickets in `AVAILABLE` only.
+          items:
+            $ref: '#/components/schemas/AvailableTicket'
+        nextCursor:
+          type: string
+          nullable: true
+          description: Present when more available tickets may exist.
+
+    StartPurchaseRequest:
+      type: object
+      additionalProperties: false
+      required: [eventId, ticketIds]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: The single Event the Order belongs to (BR-014).
+        ticketIds:
+          type: array
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          description: Tickets of that Event; between 1 and 10, without repetitions (FG-001, ADR-003).
+          items:
+            $ref: '#/components/schemas/TicketId'
+
+    FailureCause:
+      type: object
+      required: [code, message]
+      description: Functional cause of a non-confirmed Order, without technical detail.
+      properties:
+        code:
+          type: string
+          enum: [PAYMENT_DECLINED, PROCESSING_UNAVAILABLE, PROCESSING_FAILED, RESERVATION_EXPIRED]
+        message:
+          type: string
+
+    Order:
+      type: object
+      required: [orderId, eventId, ticketIds, status, createdAt, updatedAt, reservationExpiresAt]
+      description: |
+        Read from the Order alone. Technical attributes (enqueue marker,
+        payment attempt lease, payment reversal, quarantine) are not exposed.
+      properties:
+        orderId:
+          type: string
+          format: uuid
+        eventId:
+          type: string
+          format: uuid
+        ticketIds:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketId'
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        failureCause:
+          allOf:
+            - $ref: '#/components/schemas/FailureCause'
+          nullable: true
+        reservationExpiresAt:
+          type: string
+          format: date-time
+          description: Instant at which the Reservation expires if not confirmed (BR-002).
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      description: Problem Details with a stable machine-readable code (ADR-035).
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - UNAUTHENTICATED
+            - FORBIDDEN
+            - EVENT_NOT_FOUND
+            - ORDER_NOT_FOUND
+            - TICKETS_UNAVAILABLE
+            - EVENT_NOT_ON_SALE
+            - ACTIVE_ORDER_EXISTS
+            - UNKNOWN_TICKETS
+            - IDEMPOTENCY_KEY_REUSED
+            - PAYLOAD_TOO_LARGE
+            - RATE_LIMITED
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_ERROR
+        traceId:
+          type: string
+
+    ValidationProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                type: object
+                required: [field, reason]
+                properties:
+                  field:
+                    type: string
+                  reason:
+                    type: string
+
+    PurchaseConflictProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            unavailableTicketIds:
+              type: array
+              description: Present when `code` is `TICKETS_UNAVAILABLE`.
+              items:
+                $ref: '#/components/schemas/TicketId'
+
+    UnknownTicketsProblem:
+      allOf:
+        - $ref: '#/components/schemas/Problem'
+        - type: object
+          properties:
+            unknownTicketIds:
+              type: array
+              description: Present when `code` is `UNKNOWN_TICKETS`.
+              items:
+                type: string
+
+  responses:
+    ValidationError:
+      description: The request is malformed or violates an input validation. Nothing was created.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ValidationProblem'
+    Unauthenticated:
+      description: Missing or invalid JWT.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: The authenticated identity lacks the required authority.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    EventNotFound:
+      description: |
+        The Event does not exist or, for `API-003` and `API-004`, is not in
+        `ENABLED`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    OrderNotFound:
+      description: |
+        Resource not found. Identical when the Order does not exist and when it
+        belongs to another customer (BR-023).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PayloadTooLarge:
+      description: The request body exceeds the allowed size (256 KB). Not processed.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    RateLimited:
+      description: Too many requests for this identity.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ServiceUnavailable:
+      description: |
+        Temporary unavailability after bounded internal retries. The request may
+        be repeated.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying.
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PurchaseServiceUnavailable:
+      description: |
+        `SERVICE_UNAVAILABLE`. Either the queue publication circuit is open and
+        the purchase was rejected before reserving (no Reservation, Order or
+        Order identifier; inventory unchanged), or a persistent transactional
+        conflict or double failure occurred after bounded retries. Repeat with
+        the same `Idempotency-Key` after `Retry-After`.
+      headers:
+        Retry-After:
+          description: Seconds to wait before retrying (remaining open time of the circuit when applicable).
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'

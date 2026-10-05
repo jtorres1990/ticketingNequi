@@ -123,6 +123,6 @@ final class Cursors {
     }
 
     private static ValidationException invalid() {
-        return new ValidationException("cursor is invalid");
+        return new ValidationException("cursor", "cursor is invalid");
     }
 }

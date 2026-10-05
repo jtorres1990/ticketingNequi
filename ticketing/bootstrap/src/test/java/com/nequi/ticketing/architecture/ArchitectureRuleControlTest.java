@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.nequi.ticketing.architecture.fixture.domain.ForbiddenBlockingFixture;
 import com.nequi.ticketing.architecture.fixture.domain.ForbiddenDomainFixture;
 import com.nequi.ticketing.architecture.fixture.infrastructure.adapter.out.payment.ForbiddenPaymentFixture;
+import com.nequi.ticketing.architecture.fixture.infrastructure.adapter.out.sqs.ForbiddenRateLimiterFixture;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,19 @@ class ArchitectureRuleControlTest {
         assertThatThrownBy(() -> ArchitectureRules.paymentAdapterKnowsOnlyTheHttpContract().check(fixture))
                 .isInstanceOf(AssertionError.class)
                 .hasMessageContaining("org.springframework.util.StringUtils");
+    }
+
+    @Test
+    @DisplayName("ADR-032 control detects a rate limiter and a security type outside the HTTP request guard")
+    void requestGuardRulesDetectForeignUsage() {
+        var fixture = new ClassFileImporter().importClasses(ForbiddenRateLimiterFixture.class);
+
+        assertThatThrownBy(() -> ArchitectureRules.rateLimiterStaysInTheRequestGuard().check(fixture))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("io.github.resilience4j.ratelimiter.RateLimiter");
+        assertThatThrownBy(() -> ArchitectureRules.webServerAndSecurityTypesStayInTheWebAdapter().check(fixture))
+                .isInstanceOf(AssertionError.class)
+                .hasMessageContaining("org.springframework.security.core.Authentication");
     }
 
     @Test

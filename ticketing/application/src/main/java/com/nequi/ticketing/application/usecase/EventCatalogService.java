@@ -87,7 +87,7 @@ public final class EventCatalogService implements ListEventsUseCase, GetEventAva
     private Mono<AvailabilityView> availability(Event event, AvailabilityQuery query, int pageSize) {
         String section = query.section();
         if (section != null && !event.inventoryDefinition().definesSection(section)) {
-            return Mono.error(new ValidationException("section is not defined in the Event inventory"));
+            return Mono.error(new ValidationException("section", "section is not defined in the Event inventory"));
         }
         Mono<AvailableCountCache.Count> count = countCache.get(event.eventId(), () -> ticketInventory.countAvailable(event));
         Mono<AvailableTicketPage> page = ticketInventory.findAvailablePage(event, section, pageSize, query.cursor());
@@ -113,7 +113,7 @@ public final class EventCatalogService implements ListEventsUseCase, GetEventAva
             return defaultSize;
         }
         if (requested < 1 || requested > maximumSize) {
-            throw new ValidationException(field + " must be between 1 and " + maximumSize);
+            throw new ValidationException(field, field + " must be between 1 and " + maximumSize);
         }
         return requested;
     }

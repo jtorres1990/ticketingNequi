@@ -26,6 +26,13 @@ class CleanArchitectureTest {
             ArchitectureRules.retryAndCircuitBreakerStayInOutboundAdapters();
 
     @ArchTest
+    static final ArchRule RATE_LIMITER_STAYS_IN_THE_REQUEST_GUARD = ArchitectureRules.rateLimiterStaysInTheRequestGuard();
+
+    @ArchTest
+    static final ArchRule WEB_SERVER_AND_SECURITY_TYPES_STAY_IN_THE_WEB_ADAPTER =
+            ArchitectureRules.webServerAndSecurityTypesStayInTheWebAdapter();
+
+    @ArchTest
     static final ArchRule AWS_SDK_TYPES_STAY_IN_AWS_ADAPTERS = ArchitectureRules.awsSdkTypesStayInAwsAdapters();
 
     @ArchTest

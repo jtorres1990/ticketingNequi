@@ -70,6 +70,29 @@
             <groupId>io.projectreactor.netty</groupId>
             <artifactId>reactor-netty-http</artifactId>
         </dependency>
+        <!-- CMP-001, CMP-016: functional WebFlux endpoints and Problem Details (TC-003, TC-008, ADR-035, SPK-020). -->
+        <!-- CMP-002: reactive OAuth2 Resource Server validating the Cognito access token (FR-018, TC-016, ADR-032, SPK-020, SPK-022). -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-resource-server</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
+        <!-- CMP-017: in-memory, non-blocking per-subject rate limiter for API-004 (ADR-032, IV-005, SPK-023). -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-ratelimiter</artifactId>
+        </dependency>
         <!-- JSON of MSG-001 / MSG-002 with the Jackson version managed by Spring Boot 4.x (TC-002). -->
         <dependency>
             <groupId>tools.jackson.core</groupId>

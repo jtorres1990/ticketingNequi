@@ -32,7 +32,7 @@ public record Event(
         required(now, "now");
         required(definition, "inventoryDefinition").validate(capacity, limits);
         if (!startsAt.isAfter(now)) {
-            throw new ValidationException("startsAt must be in the future");
+            throw new ValidationException("startsAt", "startsAt must be in the future");
         }
         return new Event(eventId, name, venue, startsAt, capacity, definition,
                 ShardingPolicy.availabilityShards(capacity), ProvisioningStatus.PROVISIONING);

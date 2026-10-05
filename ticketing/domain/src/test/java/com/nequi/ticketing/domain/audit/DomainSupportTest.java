@@ -137,6 +137,32 @@ class DomainSupportTest {
         assertThat(error.getMessage()).isEqualTo("bad input");
     }
 
+    @Test
+    @DisplayName("ADR-035 validation failures name the offending input in the terms of the HTTP contract")
+    void validationFailuresNameTheirField() {
+        assertThat(new ValidationException("plain").field()).isEmpty();
+        assertThat(new ValidationException("cursor", "cursor is invalid").field()).contains("cursor");
+        assertThat(new ValidationException("cursor", "cursor is invalid").code()).isEqualTo(DomainErrorCode.VALIDATION_ERROR);
+        assertThatThrownBy(() -> new PurchaseRequest("event", List.of(), "valid_key_123456"))
+                .isInstanceOfSatisfying(ValidationException.class,
+                        error -> assertThat(error.field()).contains("ticketIds"));
+        assertThatThrownBy(() -> new PurchaseRequest("event", List.of("A-1-1"), "bad key"))
+                .isInstanceOfSatisfying(ValidationException.class,
+                        error -> assertThat(error.field()).contains("Idempotency-Key"));
+        InventoryDefinition overlapping = definition(
+                List.of(new Section("A", List.of(new Row("1", 3)))),
+                List.of(new ComplimentaryRange("A", "1", 1, 2), new ComplimentaryRange("A", "1", 2, 3)));
+        assertThatThrownBy(() -> overlapping.validate(3, com.nequi.ticketing.domain.event.InventoryLimits.DEPLOYED))
+                .isInstanceOfSatisfying(ValidationException.class,
+                        error -> assertThat(error.field()).contains("inventory.complimentary"));
+        assertThatThrownBy(() -> new Section("A", List.of()))
+                .isInstanceOfSatisfying(ValidationException.class,
+                        error -> assertThat(error.field()).contains("inventory.sections"));
+        assertThatThrownBy(() -> overlapping.validate(4, com.nequi.ticketing.domain.event.InventoryLimits.DEPLOYED))
+                .isInstanceOfSatisfying(ValidationException.class,
+                        error -> assertThat(error.field()).contains("capacity"));
+    }
+
     private static InventoryDefinition definition(
             List<Section> sections, List<ComplimentaryRange> complimentaryRanges) {
         return new InventoryDefinition(sections, complimentaryRanges);

@@ -11,6 +11,10 @@ import java.util.Set;
 
 public record InventoryDefinition(List<Section> sections, List<ComplimentaryRange> complimentaryRanges) {
 
+    /** Field names of the HTTP contract used to report validation failures (ADR-035). */
+    private static final String SECTIONS = "inventory.sections";
+    private static final String COMPLIMENTARY = "inventory.complimentary";
+
     public InventoryDefinition {
         sections = List.copyOf(required(sections, "sections"));
         complimentaryRanges = List.copyOf(required(complimentaryRanges, "complimentaryRanges"));
@@ -72,10 +76,10 @@ public record InventoryDefinition(List<Section> sections, List<ComplimentaryRang
     public ValidatedInventory validate(int declaredCapacity, InventoryLimits limits) {
         required(limits, "limits");
         if (declaredCapacity < 1 || declaredCapacity > limits.maximumCapacity()) {
-            throw new ValidationException("capacity must be between 1 and " + limits.maximumCapacity());
+            throw new ValidationException("capacity", "capacity must be between 1 and " + limits.maximumCapacity());
         }
         if (sections.isEmpty() || sections.size() > limits.maximumSections()) {
-            throw new ValidationException("section count is outside configured limits");
+            throw new ValidationException(SECTIONS, "section count is outside configured limits");
         }
 
         Set<String> sectionCodes = new HashSet<>();
@@ -83,28 +87,28 @@ public record InventoryDefinition(List<Section> sections, List<ComplimentaryRang
         int seats = 0;
         for (Section section : sections) {
             if (!sectionCodes.add(section.code())) {
-                throw new ValidationException("section codes must be unique");
+                throw new ValidationException(SECTIONS, "section codes must be unique");
             }
             Set<String> rowLabels = new HashSet<>();
             for (Row row : section.rows()) {
                 rows++;
                 if (!rowLabels.add(row.label())) {
-                    throw new ValidationException("row labels must be unique inside a section");
+                    throw new ValidationException(SECTIONS, "row labels must be unique inside a section");
                 }
                 if (row.seats() < 1 || row.seats() > limits.maximumSeatsPerRow()) {
-                    throw new ValidationException("seats per row are outside configured limits");
+                    throw new ValidationException(SECTIONS, "seats per row are outside configured limits");
                 }
                 seats = Math.addExact(seats, row.seats());
             }
         }
         if (rows < 1 || rows > limits.maximumRows()) {
-            throw new ValidationException("row count is outside configured limits");
+            throw new ValidationException(SECTIONS, "row count is outside configured limits");
         }
         if (seats != declaredCapacity) {
-            throw new ValidationException("capacity must equal the derived seat count");
+            throw new ValidationException("capacity", "capacity must equal the derived seat count");
         }
         if (complimentaryRanges.size() > limits.maximumComplimentaryRanges()) {
-            throw new ValidationException("complimentary range count is outside configured limits");
+            throw new ValidationException(COMPLIMENTARY, "complimentary range count is outside configured limits");
         }
 
         validateRanges();
@@ -122,10 +126,10 @@ public record InventoryDefinition(List<Section> sections, List<ComplimentaryRang
         for (ComplimentaryRange range : sorted) {
             Row row = findRow(range.section(), range.row());
             if (range.fromSeat() < 1 || range.toSeat() < range.fromSeat() || range.toSeat() > row.seats()) {
-                throw new ValidationException("complimentary range is outside its row");
+                throw new ValidationException(COMPLIMENTARY, "complimentary range is outside its row");
             }
             if (previous != null && previous.sameRow(range) && range.fromSeat() <= previous.toSeat()) {
-                throw new ValidationException("complimentary ranges must not overlap");
+                throw new ValidationException(COMPLIMENTARY, "complimentary ranges must not overlap");
             }
             previous = range;
         }
@@ -137,7 +141,7 @@ public record InventoryDefinition(List<Section> sections, List<ComplimentaryRang
                 .flatMap(section -> section.rows().stream())
                 .filter(row -> row.label().equals(rowLabel))
                 .findFirst()
-                .orElseThrow(() -> new ValidationException("complimentary range must reference an existing row"));
+                .orElseThrow(() -> new ValidationException(COMPLIMENTARY, "complimentary range must reference an existing row"));
     }
 
     private List<TicketSeed> generateTickets() {
@@ -167,7 +171,7 @@ public record InventoryDefinition(List<Section> sections, List<ComplimentaryRang
             code = required(code, "section code");
             rows = List.copyOf(required(rows, "rows"));
             if (rows.isEmpty()) {
-                throw new ValidationException("a section must contain at least one row");
+                throw new ValidationException(SECTIONS, "a section must contain at least one row");
             }
         }
     }

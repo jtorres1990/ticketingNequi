@@ -984,7 +984,7 @@ public final class InMemoryTicketingStore
             return 0;
         }
         if (!cursor.matches("events:\\d{1,6}")) {
-            throw new ValidationException("cursor is invalid");
+            throw new ValidationException("cursor", "cursor is invalid");
         }
         return Integer.parseInt(cursor.substring("events:".length()));
     }
@@ -996,7 +996,7 @@ public final class InMemoryTicketingStore
         String[] parts = cursor.split("\\|", -1);
         String expectedSection = section == null ? "" : section;
         if (parts.length != 3 || !parts[0].equals(event.eventId()) || !parts[1].equals(expectedSection) || parts[2].isEmpty()) {
-            throw new ValidationException("cursor is invalid");
+            throw new ValidationException("cursor", "cursor is invalid");
         }
         return parts[2];
     }

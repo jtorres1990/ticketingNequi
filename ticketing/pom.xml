@@ -38,7 +38,7 @@
         <jacocoArgLine/>
         <!-- Official AWS SDK for Java v2 (ADR-039); verified with Java 25 in SPK-007. -->
         <aws-sdk.version>2.55.11</aws-sdk.version>
-        <!-- Circuit breakers with the Reactor module (ADR-035, IV-001); verified with Java 25 in SPK-019. -->
+        <!-- Circuit breakers with the Reactor module (ADR-035, IV-001; SPK-019) and the per-subject rate limiter (ADR-032, IV-005; SPK-023). -->
         <resilience4j.version>2.4.0</resilience4j.version>
         <!-- OpenAPI contract validation in tests (IV-001, IV-003); last release under this coordinate. -->
         <swagger-request-validator.version>2.46.1</swagger-request-validator.version>
@@ -61,6 +61,11 @@
             <dependency>
                 <groupId>io.github.resilience4j</groupId>
                 <artifactId>resilience4j-reactor</artifactId>
+                <version>${resilience4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.resilience4j</groupId>
+                <artifactId>resilience4j-ratelimiter</artifactId>
                 <version>${resilience4j.version}</version>
             </dependency>
             <dependency>

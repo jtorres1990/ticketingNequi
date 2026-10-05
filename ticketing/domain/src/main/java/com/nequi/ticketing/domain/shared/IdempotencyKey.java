@@ -16,7 +16,7 @@ public final class IdempotencyKey {
     public static String validate(String candidate) {
         String key = required(candidate, "idempotencyKey");
         if (!FORMAT.matcher(key).matches()) {
-            throw new ValidationException("Idempotency-Key must use 16..64 URL-safe characters");
+            throw new ValidationException("Idempotency-Key", "Idempotency-Key must use 16..64 URL-safe characters");
         }
         return key;
     }
