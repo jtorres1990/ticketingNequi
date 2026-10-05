@@ -1,0 +1,4 @@
+# The contract copy is compared byte for byte by SHA-256 (PM-IV-003): never convert its line endings.
+src/test/resources/contracts/** -text
+mvnw text eol=lf
+*.cmd text eol=crlf

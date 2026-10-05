@@ -1,0 +1,19 @@
+# Payment Mock runtime configuration (PM-IV-004).
+# The API key is never versioned: it is read from the PAYMENT_MOCK_API_KEY environment variable and the
+# process does not start without it. The port is 8090 and can be overridden with SERVER_PORT.
+payment-mock:
+  api-key: ${PAYMENT_MOCK_API_KEY:}
+
+server:
+  port: 8090
+
+spring:
+  application:
+    name: payment-mock
+  main:
+    web-application-type: reactive
+    banner-mode: off
+
+logging:
+  level:
+    root: INFO
