@@ -1,5 +1,8 @@
 # Ticketing Event Processing Platform - local topology (ADR-036).
-# Services are added per platform increment (PLAT-INC-002 .. PLAT-INC-006).
+# Services were added per platform increment (PLAT-INC-002 .. PLAT-INC-006).
+#
+# Own images (ticketing-platform/*:local) are always built locally and never pulled
+# (pull_policy: never), so a same-named image on a public registry is never used.
 #
 # Default topology ("docker compose up"): dynamodb-local, localstack, local-idp, payment-mock,
 # infra-init (one-shot), ticketing-api and ticketing-worker. Profile "load" adds
@@ -122,6 +125,8 @@ services:
     build:
       context: ./payment-mock
     image: ticketing-platform/payment-mock:local
+    # Local image only: built from ./payment-mock, never looked up in a registry.
+    pull_policy: never
     environment:
       # Secret: only from the untracked .env (ADR-032). Compose refuses to start without it.
       PAYMENT_MOCK_API_KEY: ${PAYMENT_MOCK_API_KEY:?set PAYMENT_MOCK_API_KEY in .env (see .env.example)}
@@ -148,6 +153,8 @@ services:
     build:
       context: ./platform/infra-init
     image: ticketing-platform/infra-init:local
+    # Local image only: built from ./platform/infra-init, never looked up in a registry.
+    pull_policy: never
     restart: "no"
     environment:
       <<: [*aws-local-credentials, *resource-names]
@@ -170,6 +177,8 @@ services:
     build:
       context: ./platform/local-idp
     image: ticketing-platform/local-idp:local
+    # Local image only: built from ./platform/local-idp, never looked up in a registry.
+    pull_policy: never
     command: ["serve"]
     environment:
       LOCAL_IDP_ISSUER: ${LOCAL_IDP_ISSUER:-http://local-idp:9000}
@@ -250,6 +259,7 @@ services:
     build:
       context: ./platform/local-idp
     image: ticketing-platform/local-idp:local
+    pull_policy: never
     command: ["generate"]
     restart: "no"
     environment:
