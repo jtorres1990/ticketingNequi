@@ -1,0 +1,7 @@
+# Build context of the payment-mock image (PLAT-INC-004): allow-list of what the Maven build needs.
+# Everything else (target/, IDE files, logs, .git, any .env or secret) stays out of the context.
+*
+!.mvn/
+!mvnw
+!pom.xml
+!src/

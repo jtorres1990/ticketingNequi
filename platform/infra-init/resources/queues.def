@@ -1,0 +1,10 @@
+# SQS Standard queues of messaging v2 section 1 (interpretations: PLAT-IV-013 a).
+# Physical name of each role = environment variable <ROLE>_NAME.
+# Dead-letter queues are listed first: their ARN feeds the RedrivePolicy of the main queue.
+# "-" = attribute not set at creation (the wait time must then read back as the SQS default 0) / no redrive.
+#
+# role               VisibilityTimeout ReceiveMessageWaitTimeSeconds MessageRetentionPeriod DelaySeconds maxReceiveCount deadLetterRole
+ORDERS_DLQ           60                -                             1209600                0            -               -
+PROVISIONING_DLQ     120               -                             1209600                0            -               -
+ORDERS_QUEUE         60                20                            3600                   0            5               ORDERS_DLQ
+PROVISIONING_QUEUE   120               20                            86400                  0            5               PROVISIONING_DLQ

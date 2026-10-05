@@ -1,0 +1,5 @@
+# Local platform (PLAT-INC-001): real environment files are never versioned (ADR-036, ADR-032).
+# Only .env.example, with fictitious values, is committed.
+.env
+.env.*
+!.env.example

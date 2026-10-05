@@ -1,0 +1,6 @@
+# Files under platform/ run inside Linux containers: always LF, whatever core.autocrlf says.
+* text=auto eol=lf
+*.sh text eol=lf
+*.java text eol=lf
+*.json text eol=lf
+Dockerfile text eol=lf

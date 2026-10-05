@@ -1,0 +1,200 @@
+# Ticketing Event Processing Platform - local topology (ADR-036).
+# Services are added per platform increment (PLAT-INC-002 .. PLAT-INC-006).
+#
+# Rules: never use container_name (the project name scopes containers, networks and
+# volumes); host ports bound to 127.0.0.1 only (PLAT-IV-008); emulator data is
+# ephemeral (no data volumes); external images pinned by tag and digest.
+name: ticketing-platform
+
+x-aws-local-credentials: &aws-local-credentials
+  AWS_REGION: ${AWS_REGION:?set AWS_REGION in .env (see .env.example)}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:?set a fictitious AWS_ACCESS_KEY_ID in .env (see .env.example)}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:?set a fictitious AWS_SECRET_ACCESS_KEY in .env (see .env.example)}
+
+x-resource-names: &resource-names
+  TICKETING_TABLE_NAME: ${TICKETING_TABLE_NAME:-ticketing}
+  ORDERS_QUEUE_NAME: ${ORDERS_QUEUE_NAME:-ticketing-orders}
+  ORDERS_DLQ_NAME: ${ORDERS_DLQ_NAME:-ticketing-orders-dlq}
+  PROVISIONING_QUEUE_NAME: ${PROVISIONING_QUEUE_NAME:-ticketing-event-provisioning}
+  PROVISIONING_DLQ_NAME: ${PROVISIONING_DLQ_NAME:-ticketing-event-provisioning-dlq}
+
+services:
+
+  # --- DynamoDB Local (TC-004): in-memory, shared database for every credential/region.
+  dynamodb-local:
+    image: amazon/dynamodb-local:3.3.1@sha256:ff89bd48ff32cd8d9be5fee8873b65b8854dc408f1afe881be6eb00247bc0dab
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports:
+      - "127.0.0.1:${DYNAMODB_HOST_PORT:-8000}:8000"
+    networks: [ticketing-net]
+    read_only: true
+    # /tmp needs exec: DynamoDB Local extracts its native SQLite library there.
+    tmpfs: ["/tmp:exec,mode=1777"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      # Real ListTables operation (not only an open port).
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS -o /dev/null -X POST http://localhost:8000/
+          -H 'Content-Type: application/x-amz-json-1.0'
+          -H 'X-Amz-Target: DynamoDB_20120810.ListTables'
+          -H 'Authorization: AWS4-HMAC-SHA256 Credential=healthcheck/20260101/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=0'
+          --data '{}'
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+      start_interval: 1s
+
+  # --- LocalStack (TC-005), pinned tag without auth token (ADR-036), SQS only.
+  localstack:
+    image: localstack/localstack:4.14.0@sha256:3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a
+    environment:
+      SERVICES: sqs
+      EAGER_SERVICE_LOADING: "1"
+      PERSISTENCE: "0"
+      # Deterministic queue URLs reachable by service name inside the network:
+      # http://localstack:4566/queue/<region>/000000000000/<queue-name>
+      SQS_ENDPOINT_STRATEGY: path
+      LOCALSTACK_HOST: localstack:4566
+    ports:
+      - "127.0.0.1:${LOCALSTACK_HOST_PORT:-4566}:4566"
+    networks: [ticketing-net]
+    # Ephemeral state: overrides the image VOLUME so no anonymous volume is created.
+    tmpfs: [/var/lib/localstack]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      # SQS reported available/running and a real ListQueues call answered.
+      test:
+        - CMD-SHELL
+        - >-
+          curl -fsS http://localhost:4566/_localstack/health | grep -Eq '"sqs": *"(available|running)"'
+          && curl -fsS -o /dev/null -X POST http://localhost:4566/
+          -H 'Content-Type: application/x-www-form-urlencoded'
+          --data 'Action=ListQueues&Version=2012-11-05'
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+      start_interval: 1s
+
+  # --- Payment Mock (ADR-030, ADR-034): own folder, own build, own image. Control API on the host.
+  payment-mock:
+    build:
+      context: ./payment-mock
+    image: ticketing-platform/payment-mock:local
+    environment:
+      # Secret: only from the untracked .env (ADR-032). Compose refuses to start without it.
+      PAYMENT_MOCK_API_KEY: ${PAYMENT_MOCK_API_KEY:?set PAYMENT_MOCK_API_KEY in .env (see .env.example)}
+    ports:
+      # Container port fixed at 8090 (contract servers); host side configurable (PLAT-IV-008).
+      - "127.0.0.1:${PAYMENT_MOCK_HOST_PORT:-8090}:8090"
+    networks: [ticketing-net]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 384m
+    healthcheck:
+      # GET /health -> 200 (API-111), JDK probe compiled in the image build.
+      test: ["CMD", "java", "-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-Xmx16m", "-cp", "/opt/probe", "HealthProbe", "http://localhost:8090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 1s
+
+  # --- One-shot, idempotent resource creation (ADR-036). Never restarted.
+  infra-init:
+    build:
+      context: ./platform/infra-init
+    image: ticketing-platform/infra-init:local
+    restart: "no"
+    environment:
+      <<: [*aws-local-credentials, *resource-names]
+      DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+      SQS_ENDPOINT: http://localstack:4566
+      INFRA_INIT_WAIT_TIMEOUT_SECONDS: ${INFRA_INIT_WAIT_TIMEOUT_SECONDS:-60}
+    depends_on:
+      dynamodb-local:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    networks: [ticketing-net]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # --- Local OIDC/JWT issuer (ADR-033, CMP-020). Local profile only; ephemeral key.
+  local-idp:
+    build:
+      context: ./platform/local-idp
+    image: ticketing-platform/local-idp:local
+    command: ["serve"]
+    environment:
+      LOCAL_IDP_ISSUER: ${LOCAL_IDP_ISSUER:-http://local-idp:9000}
+      LOCAL_IDP_CLIENT_ID: ${LOCAL_IDP_CLIENT_ID:-ticketing-local-client}
+      LOCAL_IDP_DEFAULT_TTL_SECONDS: ${LOCAL_IDP_DEFAULT_TTL_SECONDS:-3600}
+      LOCAL_IDP_MAX_TTL_SECONDS: ${LOCAL_IDP_MAX_TTL_SECONDS:-86400}
+    ports:
+      - "127.0.0.1:${LOCAL_IDP_HOST_PORT:-9000}:9000"
+    networks: [ticketing-net]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    healthcheck:
+      # Discovery and JWKS answer 200 (JDK probe: the JRE image has no curl/wget).
+      test:
+        - CMD
+        - java
+        - -XX:TieredStopAtLevel=1
+        - -XX:+UseSerialGC
+        - -Xmx32m
+        - -jar
+        - /app/local-idp.jar
+        - probe
+        - http://localhost:9000/.well-known/openid-configuration
+        - http://localhost:9000/.well-known/jwks.json
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+      start_interval: 1s
+
+  # --- Load profile: pre-generates > 1.000 distinct CUSTOMER tokens (ADR-033, ADR-036, PLAT-IV-009 a).
+  #     Output in the ephemeral volume load-tokens: /tokens/customer-tokens.csv and /tokens/manifest.json.
+  load-token-generator:
+    profiles: [load]
+    build:
+      context: ./platform/local-idp
+    image: ticketing-platform/local-idp:local
+    command: ["generate"]
+    restart: "no"
+    environment:
+      LOCAL_IDP_URL: http://local-idp:9000
+      LOAD_TOKEN_COUNT: ${LOAD_TOKEN_COUNT:-1200}
+      LOAD_TOKEN_TTL_SECONDS: ${LOAD_TOKEN_TTL_SECONDS:-7200}
+      LOAD_TOKEN_OUTPUT_DIR: /tokens
+    volumes:
+      - load-tokens:/tokens
+    depends_on:
+      local-idp:
+        condition: service_healthy
+    networks: [ticketing-net]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+networks:
+  ticketing-net:
+    driver: bridge
+
+volumes:
+  # Only volume of the project: load profile token batch, removed with "docker compose down -v".
+  load-tokens: {}
