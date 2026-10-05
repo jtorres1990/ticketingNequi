@@ -32,6 +32,10 @@ class CleanArchitectureTest {
     static final ArchRule PAYMENT_ADAPTER_TYPES_DO_NOT_LEAK = ArchitectureRules.paymentAdapterTypesDoNotLeak();
 
     @ArchTest
+    static final ArchRule PAYMENT_ADAPTER_KNOWS_ONLY_THE_HTTP_CONTRACT =
+            ArchitectureRules.paymentAdapterKnowsOnlyTheHttpContract();
+
+    @ArchTest
     static final ArchRule INBOUND_ADAPTERS_USE_ONLY_INBOUND_PORTS = ArchitectureRules.inboundAdaptersUseOnlyInboundPorts();
 
     @ArchTest

@@ -40,6 +40,8 @@
         <aws-sdk.version>2.55.11</aws-sdk.version>
         <!-- Circuit breakers with the Reactor module (ADR-035, IV-001); verified with Java 25 in SPK-019. -->
         <resilience4j.version>2.4.0</resilience4j.version>
+        <!-- OpenAPI contract validation in tests (IV-001, IV-003); last release under this coordinate. -->
+        <swagger-request-validator.version>2.46.1</swagger-request-validator.version>
     </properties>
 
     <dependencyManagement>
@@ -60,6 +62,11 @@
                 <groupId>io.github.resilience4j</groupId>
                 <artifactId>resilience4j-reactor</artifactId>
                 <version>${resilience4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.atlassian.oai</groupId>
+                <artifactId>swagger-request-validator-core</artifactId>
+                <version>${swagger-request-validator.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

@@ -7,15 +7,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * {@link ConsumptionGate} switched by its owner: {@link #open()}, {@link #pause()} or {@link #probe(int)}.
- * INC-007 drives it from the state-change events of the Payment Mock circuit breaker (open = pause,
- * half-open = probe with the permitted probe calls, closed = open). Lock-free; listeners are invoked on the
- * thread that switches the gate and must not block (NFR-003).
+ * {@link ConsumptionGate} switched by its owner: {@link #open()}, {@link #pause()}, {@link #probe(int)} (at
+ * most N messages until switched again) or {@link #limitInFlight(int)} (at most N messages in flight: the
+ * permit of a message returns when it finishes). {@link CircuitGateBinding} drives it from the Payment Mock
+ * circuit breaker (open = pause, half-open = in-flight limit of the probe calls, closed = open). Lock-free;
+ * listeners are invoked on the thread that switches the gate and must not block (NFR-003).
  */
 public final class SwitchableConsumptionGate implements ConsumptionGate {
 
-    private static final Mode OPEN = new Mode(ModeKind.OPEN, null);
-    private static final Mode PAUSED = new Mode(ModeKind.PAUSED, null);
+    private static final Mode OPEN = new Mode(ModeKind.OPEN, null, 0);
+    private static final Mode PAUSED = new Mode(ModeKind.PAUSED, null, 0);
 
     private final AtomicReference<Mode> mode = new AtomicReference<>(OPEN);
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
@@ -28,12 +29,18 @@ public final class SwitchableConsumptionGate implements ConsumptionGate {
         switchTo(PAUSED);
     }
 
-    /** Half-open: the loop may receive at most {@code messages} messages until the gate is switched again. */
+    /** The loop may receive at most {@code messages} messages until the gate is switched again. */
     public void probe(int messages) {
-        if (messages < 1) {
-            throw new IllegalArgumentException("probe messages must be positive");
-        }
-        switchTo(new Mode(ModeKind.PROBING, new AtomicInteger(messages)));
+        switchTo(new Mode(ModeKind.PROBING, new AtomicInteger(positive(messages)), messages));
+    }
+
+    /**
+     * Half-open (ADR-035, ADR-039): at most {@code messages} received messages in flight; each permit returns
+     * when its message finishes ({@link #completed(int)}), so the loop keeps receiving a few messages at a
+     * time until the gate is switched again. The returned permits are capped at {@code messages}.
+     */
+    public void limitInFlight(int messages) {
+        switchTo(new Mode(ModeKind.LIMITED, new AtomicInteger(positive(messages)), messages));
     }
 
     @Override
@@ -45,15 +52,23 @@ public final class SwitchableConsumptionGate implements ConsumptionGate {
         return switch (current.kind()) {
             case OPEN -> wanted;
             case PAUSED -> 0;
-            case PROBING -> take(current.remaining(), wanted);
+            case PROBING, LIMITED -> take(current.remaining(), wanted);
         };
     }
 
     @Override
     public void release(int unused) {
         Mode current = mode.get();
-        if (unused > 0 && current.kind() == ModeKind.PROBING) {
-            current.remaining().addAndGet(unused);
+        if (unused > 0 && (current.kind() == ModeKind.PROBING || current.kind() == ModeKind.LIMITED)) {
+            give(current, unused);
+        }
+    }
+
+    @Override
+    public void completed(int messages) {
+        Mode current = mode.get();
+        if (messages > 0 && current.kind() == ModeKind.LIMITED) {
+            give(current, messages);
         }
     }
 
@@ -65,6 +80,13 @@ public final class SwitchableConsumptionGate implements ConsumptionGate {
     @Override
     public void addListener(Runnable listener) {
         listeners.add(Objects.requireNonNull(listener, "listener"));
+    }
+
+    private static int positive(int messages) {
+        if (messages < 1) {
+            throw new IllegalArgumentException("probe messages must be positive");
+        }
+        return messages;
     }
 
     private static int take(AtomicInteger remaining, int wanted) {
@@ -80,6 +102,10 @@ public final class SwitchableConsumptionGate implements ConsumptionGate {
         }
     }
 
+    private static void give(Mode mode, int permits) {
+        mode.remaining().accumulateAndGet(permits, (available, returned) -> Math.min(mode.limit(), available + returned));
+    }
+
     private void switchTo(Mode next) {
         mode.set(next);
         listeners.forEach(Runnable::run);
@@ -88,9 +114,10 @@ public final class SwitchableConsumptionGate implements ConsumptionGate {
     private enum ModeKind {
         OPEN,
         PAUSED,
-        PROBING
+        PROBING,
+        LIMITED
     }
 
-    private record Mode(ModeKind kind, AtomicInteger remaining) {
+    private record Mode(ModeKind kind, AtomicInteger remaining, int limit) {
     }
 }

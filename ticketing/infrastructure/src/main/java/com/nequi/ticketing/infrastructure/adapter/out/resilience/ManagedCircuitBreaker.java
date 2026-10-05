@@ -12,6 +12,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.function.UnaryOperator;
@@ -32,13 +33,15 @@ public final class ManagedCircuitBreaker {
     private final CircuitBreaker breaker;
     private final Clock clock;
     private final Duration openDuration;
+    private final int probeCalls;
     private final List<Consumer<CircuitState>> listeners = new CopyOnWriteArrayList<>();
     private volatile Instant openUntil = Instant.MIN;
 
-    private ManagedCircuitBreaker(CircuitBreaker breaker, Clock clock, Duration openDuration) {
+    private ManagedCircuitBreaker(CircuitBreaker breaker, Clock clock, Duration openDuration, int probeCalls) {
         this.breaker = breaker;
         this.clock = clock;
         this.openDuration = openDuration;
+        this.probeCalls = probeCalls;
         breaker.getEventPublisher()
                 .onStateTransition(event -> onTransition(map(event.getStateTransition().getToState())));
     }
@@ -55,7 +58,7 @@ public final class ManagedCircuitBreaker {
         Objects.requireNonNull(settings, "settings");
         Objects.requireNonNull(clock, "clock");
         Objects.requireNonNull(isFailure, "isFailure");
-        CircuitBreakerConfig config = CircuitBreakerConfig.custom()
+        CircuitBreakerConfig.Builder config = CircuitBreakerConfig.custom()
                 .slidingWindow(settings.slidingWindowSize(), settings.minimumNumberOfCalls(),
                         CircuitBreakerConfig.SlidingWindowType.COUNT_BASED,
                         CircuitBreakerConfig.SlidingWindowSynchronizationStrategy.LOCK_FREE)
@@ -65,8 +68,14 @@ public final class ManagedCircuitBreaker {
                 .recordException(isFailure)
                 .ignoreException(isFailure.negate())
                 .clock(new ApplicationClock(clock))
-                .build();
-        return new ManagedCircuitBreaker(CircuitBreaker.of(name, config), clock, settings.openDuration());
+                // Call durations (slow calls) are measured on the application clock as well.
+                .currentTimestampFunction(java.time.Clock::millis, TimeUnit.MILLISECONDS);
+        if (settings.slowCallsOpenTheCircuit()) {
+            config.slowCallDurationThreshold(settings.slowCallDurationThreshold())
+                    .slowCallRateThreshold(settings.slowCallRateThresholdPercent());
+        }
+        return new ManagedCircuitBreaker(CircuitBreaker.of(name, config.build()), clock, settings.openDuration(),
+                settings.halfOpenProbeCalls());
     }
 
     /** Reactor operator: each subscription is one call of the statistics; rejected while the circuit is open. */
@@ -90,6 +99,11 @@ public final class ManagedCircuitBreaker {
     /** Time left before the open circuit admits probe calls; zero when it is not {@link #rejectingCalls()}. */
     public Duration remainingOpenTime() {
         return rejectingCalls() ? Duration.between(clock.now(), openUntil) : Duration.ZERO;
+    }
+
+    /** Number of probe calls the circuit permits while half-open (ADR-035). */
+    public int probeCalls() {
+        return probeCalls;
     }
 
     /** Registers a listener of state changes; it runs on the thread that caused the transition and must not block. */

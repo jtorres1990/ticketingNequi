@@ -1,0 +1,511 @@
+openapi: 3.0.3
+
+info:
+  title: Payment Mock API
+  version: 1.0.0
+  description: |
+    HTTP contract of the Payment Mock, an independent project in the same
+    repository with its own build, Dockerfile and tests (ADR-030, ADR-034).
+    No code is shared with `ticketing`; the `ticketing` payment adapter
+    (CMP-013) defines its own types and couples only to this contract.
+
+    Status: ACCEPTED (architecture version 2). Deployed only in non-production
+    environments (ADR-037).
+
+    Identifiers: operations use the `API-1xx` range, reserved for the Payment
+    Mock so that they never collide with `ticketing` operations (`API-001` to
+    `API-006`).
+
+    Determinism (AV-004): the outcome is selected by rules configured through
+    the control API, never by a field of the purchase request.
+    Idempotency: authorization and cancellation are idempotent per
+    `paymentAttemptId` (ADR-027, FG-003).
+    Early cancellation (FG-003): a cancellation received before any
+    authorization result is recorded and makes every later authorization with
+    the same `paymentAttemptId` resolve as `DECLINED` with reason
+    `ATTEMPT_CANCELLED`.
+    State is kept in memory and is lost on restart.
+
+servers:
+  - url: http://payment-mock:8090
+    description: Local environment (Docker Compose service name)
+
+tags:
+  - name: Payments
+    description: Operations consumed by the ticketing payment adapter
+  - name: Control
+    description: Test and demonstration control API (non-production only)
+  - name: Health
+    description: Liveness
+
+security:
+  - apiKey: []
+
+paths:
+
+  /payments:
+    post:
+      operationId: authorizePayment
+      x-id: API-101
+      x-source-ids: [TC-017, FR-015, FR-017, BR-020, AC-019, AC-020, AC-021, AC-024, ALT-004, ALT-005, ERR-008]
+      x-related-adrs: [ADR-030, ADR-027, ADR-035]
+      tags: [Payments]
+      summary: Authorize a payment attempt
+      description: |
+        Returns `APPROVED` or `DECLINED` deterministically according to the
+        configured rules. A repetition with the same `Idempotency-Key`
+        (= `paymentAttemptId`) returns the stored result without counting a new
+        payment, and reports whether the attempt was cancelled afterwards.
+        Simulated failures produce 5xx responses or no response within the
+        caller timeout; simulated added latency delays the response.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Must equal `paymentAttemptId`.
+          schema:
+            type: string
+            maxLength: 80
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizationRequest'
+      responses:
+        '200':
+          description: Final authorization result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationResult'
+        '400':
+          $ref: '#/components/responses/ContractError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ContractError'
+        '500':
+          $ref: '#/components/responses/SimulatedFailure'
+        '503':
+          $ref: '#/components/responses/SimulatedFailure'
+
+  /payments/{paymentAttemptId}/cancellation:
+    post:
+      operationId: cancelPayment
+      x-id: API-102
+      x-source-ids: [FR-015, FR-017, BR-003, AC-019, FG-003]
+      x-related-adrs: [ADR-030, ADR-025, ADR-008]
+      tags: [Payments]
+      summary: Cancel (reverse) a payment attempt
+      description: |
+        Idempotent per `paymentAttemptId` and valid whatever the state of the
+        attempt: approved (reversed), declined (voided), non-existent or still
+        in transit (registered before charge; later authorizations are
+        declined). Repeating the cancellation returns the same
+        `cancellationStatus` and does not count a new cancellation.
+      parameters:
+        - $ref: '#/components/parameters/PaymentAttemptId'
+      responses:
+        '200':
+          description: Cancellation recorded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancellationResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/SimulatedFailure'
+        '503':
+          $ref: '#/components/responses/SimulatedFailure'
+
+  /control/rules:
+    get:
+      operationId: listRules
+      x-id: API-103
+      x-source-ids: [TC-017, AV-004]
+      x-related-adrs: [ADR-030]
+      tags: [Control]
+      summary: List outcome rules
+      responses:
+        '200':
+          description: Configured rules in precedence order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OutcomeRule'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      operationId: createRule
+      x-id: API-104
+      x-source-ids: [TC-017, AV-004, AC-020, AC-021]
+      x-related-adrs: [ADR-030]
+      tags: [Control]
+      summary: Create an outcome rule
+      description: |
+        Rules match by `orderId`, `ticketId`, `customerRef` or `eventId`, with
+        that precedence. Behaviours: approve, decline, definitive error,
+        N transient errors followed by a final outcome, added latency.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OutcomeRuleInput'
+      responses:
+        '201':
+          description: Rule created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutcomeRule'
+        '400':
+          $ref: '#/components/responses/ContractError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    delete:
+      operationId: deleteAllRules
+      x-id: API-105
+      x-source-ids: [TC-017]
+      x-related-adrs: [ADR-030]
+      tags: [Control]
+      summary: Delete all outcome rules
+      responses:
+        '204':
+          description: Rules deleted.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /control/rules/{ruleId}:
+    delete:
+      operationId: deleteRule
+      x-id: API-106
+      x-source-ids: [TC-017]
+      x-related-adrs: [ADR-030]
+      tags: [Control]
+      summary: Delete one outcome rule
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Rule deleted (idempotent).
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /control/defaults:
+    put:
+      operationId: setDefaults
+      x-id: API-107
+      x-source-ids: [TC-017, NFR-001, AC-029]
+      x-related-adrs: [ADR-030, ADR-038]
+      tags: [Control]
+      summary: Set the default outcome and the deterministic decline percentage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Defaults'
+      responses:
+        '200':
+          description: Defaults stored.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Defaults'
+        '400':
+          $ref: '#/components/responses/ContractError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /control/authorizations/{paymentAttemptId}:
+    get:
+      operationId: getAuthorizationRecord
+      x-id: API-108
+      x-source-ids: [AC-023, AC-024]
+      x-related-adrs: [ADR-030, ADR-038]
+      tags: [Control]
+      summary: Inspect authorizations received for an attempt
+      parameters:
+        - $ref: '#/components/parameters/PaymentAttemptId'
+      responses:
+        '200':
+          description: Authorization record of the attempt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No authorization was received for this attempt.
+
+  /control/cancellations/{paymentAttemptId}:
+    get:
+      operationId: getCancellationRecord
+      x-id: API-109
+      x-source-ids: [FG-003, AC-019]
+      x-related-adrs: [ADR-030, ADR-038]
+      tags: [Control]
+      summary: Inspect cancellations received for an attempt
+      description: Verifies that an approved payment without purchase is reversed exactly once.
+      parameters:
+        - $ref: '#/components/parameters/PaymentAttemptId'
+      responses:
+        '200':
+          description: Cancellation record of the attempt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancellationRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No cancellation was received for this attempt.
+
+  /control/reset:
+    post:
+      operationId: resetState
+      x-id: API-110
+      x-source-ids: [TC-017]
+      x-related-adrs: [ADR-030]
+      tags: [Control]
+      summary: Clear rules, defaults, authorizations and cancellations
+      responses:
+        '204':
+          description: State cleared.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /health:
+    get:
+      operationId: health
+      x-id: API-111
+      x-source-ids: [TC-006, TC-012]
+      x-related-adrs: [ADR-036]
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: The service is up.
+
+components:
+
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: |
+        Shared API key provided by environment configuration (local: non
+        versioned environment file; AWS non-production: secrets manager). Never
+        logged (ADR-032).
+
+  parameters:
+    PaymentAttemptId:
+      name: paymentAttemptId
+      in: path
+      required: true
+      description: Payment attempt identifier `<orderId>-<paymentAttemptNo>`.
+      schema:
+        type: string
+        maxLength: 80
+
+  schemas:
+
+    AuthorizationRequest:
+      type: object
+      additionalProperties: false
+      required: [paymentAttemptId, orderId, eventId, customerRef, ticketIds]
+      properties:
+        paymentAttemptId:
+          type: string
+          maxLength: 80
+        orderId:
+          type: string
+          format: uuid
+        eventId:
+          type: string
+          format: uuid
+        customerRef:
+          type: string
+          description: Opaque customer reference (subject identifier); no personal data.
+          maxLength: 128
+        ticketIds:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: string
+            maxLength: 24
+
+    AuthorizationResult:
+      type: object
+      required: [paymentAttemptId, status, providerReference]
+      properties:
+        paymentAttemptId:
+          type: string
+        status:
+          type: string
+          enum: [APPROVED, DECLINED]
+        providerReference:
+          type: string
+        reasonCode:
+          type: string
+          nullable: true
+          description: Present when `DECLINED`.
+          enum: [CARD_DECLINED, INSUFFICIENT_FUNDS, RULE_DECLINED, PERCENTAGE_DECLINED, ATTEMPT_CANCELLED]
+        replayed:
+          type: boolean
+          description: True when the result was returned from the idempotency store.
+        cancelled:
+          type: boolean
+          description: True when the attempt was cancelled after this result.
+
+    CancellationResult:
+      type: object
+      required: [paymentAttemptId, cancellationStatus]
+      properties:
+        paymentAttemptId:
+          type: string
+        cancellationStatus:
+          type: string
+          enum: [REVERSED, VOIDED, REGISTERED_BEFORE_CHARGE]
+          description: |
+            `REVERSED`: the attempt was approved and is now reversed.
+            `VOIDED`: the attempt was declined; nothing to reverse.
+            `REGISTERED_BEFORE_CHARGE`: no result existed (non-existent or in
+            transit); later authorizations are declined.
+        replayed:
+          type: boolean
+
+    OutcomeRuleInput:
+      type: object
+      additionalProperties: false
+      required: [match, behaviour]
+      properties:
+        match:
+          type: object
+          additionalProperties: false
+          description: Exactly one matcher must be present.
+          properties:
+            orderId:
+              type: string
+            ticketId:
+              type: string
+            customerRef:
+              type: string
+            eventId:
+              type: string
+        behaviour:
+          type: object
+          additionalProperties: false
+          required: [type]
+          properties:
+            type:
+              type: string
+              enum: [APPROVE, DECLINE, DEFINITIVE_ERROR, TRANSIENT_THEN_OUTCOME, LATENCY]
+            transientFailures:
+              type: integer
+              minimum: 0
+              description: For `TRANSIENT_THEN_OUTCOME`, number of initial 5xx responses.
+            finalOutcome:
+              type: string
+              enum: [APPROVED, DECLINED]
+            addedLatencyMs:
+              type: integer
+              minimum: 0
+              maximum: 60000
+            reasonCode:
+              type: string
+
+    OutcomeRule:
+      allOf:
+        - $ref: '#/components/schemas/OutcomeRuleInput'
+        - type: object
+          required: [ruleId]
+          properties:
+            ruleId:
+              type: string
+
+    Defaults:
+      type: object
+      additionalProperties: false
+      required: [defaultOutcome]
+      properties:
+        defaultOutcome:
+          type: string
+          enum: [APPROVED, DECLINED]
+        declinePercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Deterministic by stable hash of `paymentAttemptId`.
+
+    AuthorizationRecord:
+      type: object
+      required: [paymentAttemptId, invocations]
+      properties:
+        paymentAttemptId:
+          type: string
+        invocations:
+          type: integer
+          description: Number of authorization calls received for the attempt.
+        result:
+          allOf:
+            - $ref: '#/components/schemas/AuthorizationResult'
+          nullable: true
+
+    CancellationRecord:
+      type: object
+      required: [paymentAttemptId, received, cancellationStatus]
+      properties:
+        paymentAttemptId:
+          type: string
+        received:
+          type: integer
+          description: Number of cancellation calls received for the attempt.
+        cancellationStatus:
+          type: string
+          enum: [REVERSED, VOIDED, REGISTERED_BEFORE_CHARGE]
+        firstReceivedAt:
+          type: string
+          format: date-time
+
+    Error:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+
+  responses:
+    ContractError:
+      description: Contract error. Definitive; does not count as a failure for the caller circuit breaker.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Missing or invalid API key. Definitive for the caller.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    SimulatedFailure:
+      description: Simulated transient failure. Counts as a failure for the caller circuit breaker.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

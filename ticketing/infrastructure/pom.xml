@@ -61,6 +61,15 @@
             <groupId>io.github.resilience4j</groupId>
             <artifactId>resilience4j-reactor</artifactId>
         </dependency>
+        <!-- CMP-013: reactive HTTP client of Spring (WebClient on Reactor Netty) for the Payment Mock (ADR-030, SPK-021). -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webflux</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor.netty</groupId>
+            <artifactId>reactor-netty-http</artifactId>
+        </dependency>
         <!-- JSON of MSG-001 / MSG-002 with the Jackson version managed by Spring Boot 4.x (TC-002). -->
         <dependency>
             <groupId>tools.jackson.core</groupId>
@@ -104,6 +113,12 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Requests and responses of the Payment Mock test server validated against its OpenAPI copy (IV-001, IV-003). -->
+        <dependency>
+            <groupId>com.atlassian.oai</groupId>
+            <artifactId>swagger-request-validator-core</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

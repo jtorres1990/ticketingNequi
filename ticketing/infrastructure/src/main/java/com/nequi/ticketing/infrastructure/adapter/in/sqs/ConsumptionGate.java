@@ -4,7 +4,8 @@ package com.nequi.ticketing.infrastructure.adapter.in.sqs;
  * Gate that governs whether a consumer loop may receive (ADR-029, ADR-035, ADR-039): open (receive
  * normally), paused (do not receive, so no reception of {@code maxReceiveCount} is consumed) or probing
  * (receive only a limited number of probe messages). The Orders loop (CMP-012) is governed by a gate that
- * INC-007 connects to the state of the Payment Mock circuit breaker; implementations must not block.
+ * {@link CircuitGateBinding} connects to the state of the Payment Mock circuit breaker (INC-007);
+ * implementations must not block.
  */
 public interface ConsumptionGate {
 
@@ -13,6 +14,15 @@ public interface ConsumptionGate {
 
     /** Returns permits obtained with {@link #acquire} that were not used by the reception. */
     void release(int unused);
+
+    /**
+     * Reports that {@code messages} received messages have finished processing. A gate that bounds the
+     * messages in flight (half-open with {@code SwitchableConsumptionGate#limitInFlight}) returns their
+     * permits; by default nothing happens.
+     */
+    default void completed(int messages) {
+        // the gate does not bound the messages in flight
+    }
 
     /** Whether the gate is paused; an in-flight long poll is abandoned when the gate pauses. */
     boolean isPaused();

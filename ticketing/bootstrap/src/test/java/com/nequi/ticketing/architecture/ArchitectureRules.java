@@ -3,7 +3,9 @@ package com.nequi.ticketing.architecture;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
+import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
+import com.tngtech.archunit.core.domain.properties.HasName;
 import com.tngtech.archunit.core.domain.JavaMethodCall;
 import com.tngtech.archunit.lang.ArchCondition;
 import com.tngtech.archunit.lang.ArchRule;
@@ -74,10 +76,33 @@ final class ArchitectureRules {
     }
 
     static ArchRule paymentAdapterTypesDoNotLeak() {
+        DescribedPredicate<JavaClass> facade = HasName.Predicates.nameMatching(
+                ".*\\.infrastructure\\.adapter\\.out\\.payment\\."
+                        + "(PaymentMockGateway|PaymentGatewaySettings|PaymentEvents)(\\$.*)?")
+                .forSubtype();
+        DescribedPredicate<JavaClass> internalTypes = JavaClass.Predicates
+                .resideInAPackage("..infrastructure.adapter.out.payment..")
+                .and(DescribedPredicate.not(facade))
+                .as("payment adapter types other than its facade (gateway, settings, events hook)");
         return noClasses()
                 .that().resideOutsideOfPackage("..infrastructure.adapter.out.payment..")
-                .should().dependOnClassesThat().resideInAnyPackage("..infrastructure.adapter.out.payment..")
-                .because("ADR-034 requires payment adapter types to remain private to the adapter");
+                .should().dependOnClassesThat(internalTypes)
+                .because("ADR-034 requires payment adapter types (wire format, transport, failures) to remain "
+                        + "private to the adapter; composition only uses its facade");
+    }
+
+    static ArchRule paymentAdapterKnowsOnlyTheHttpContract() {
+        return classes()
+                .that().resideInAPackage("..infrastructure.adapter.out.payment..")
+                .should().onlyDependOnClassesThat().resideInAnyPackage(
+                        "java..", "reactor..", "org.reactivestreams..", "io.netty..",
+                        "org.springframework.http..", "org.springframework.web.reactive.function.client..",
+                        "tools.jackson..",
+                        "com.nequi.ticketing.application.port.out..",
+                        "com.nequi.ticketing.infrastructure.adapter.out.payment..",
+                        "com.nequi.ticketing.infrastructure.adapter.out.resilience..")
+                .because("ADR-034 boundary rule 7: the payment adapter defines its own types and only knows the "
+                        + "HTTP contract of the Payment Mock (no code shared with payment-mock)");
     }
 
     static ArchRule inboundAdaptersUseOnlyInboundPorts() {

@@ -148,6 +148,7 @@ final class ConsumerLoop {
                 .onErrorResume(error -> Mono.empty())
                 .doFinally(signal -> {
                     inFlight.decrementAndGet();
+                    gate.completed(1);
                     signal();
                 })
                 .subscribeOn(scheduler)
