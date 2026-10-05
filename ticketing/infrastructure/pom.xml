@@ -41,6 +41,31 @@
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>netty-nio-client</artifactId>
         </dependency>
+        <!-- CMP-011, CMP-012, CMP-025: asynchronous SQS client with the Netty asynchronous HTTP client (ADR-039, IV-001). -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sqs</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <!-- CMP-026: circuit breakers with the Reactor module (ADR-035, IV-001, SPK-019). -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-reactor</artifactId>
+        </dependency>
+        <!-- JSON of MSG-001 / MSG-002 with the Jackson version managed by Spring Boot 4.x (TC-002). -->
+        <dependency>
+            <groupId>tools.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
         <!-- Bounded in-memory cache of ENABLED Events (ADR-023, ADR-040, IV-001, IV-004). -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
@@ -85,18 +110,6 @@
             <groupId>org.awaitility</groupId>
             <artifactId>awaitility</artifactId>
             <scope>test</scope>
-        </dependency>
-        <!-- SQS client only for the toolchain spikes SPK-006/SPK-007; the SQS adapters arrive in INC-006. -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>sqs</artifactId>
-            <scope>test</scope>
-            <exclusions>
-                <exclusion>
-                    <groupId>software.amazon.awssdk</groupId>
-                    <artifactId>apache-client</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
     </dependencies>
 </project>

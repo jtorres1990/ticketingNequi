@@ -65,9 +65,12 @@ final class ArchitectureRules {
         return noClasses()
                 .that().resideOutsideOfPackages(
                         "..infrastructure.adapter.out.dynamodb..",
-                        "..infrastructure.adapter.out.sqs..")
+                        "..infrastructure.adapter.out.sqs..",
+                        "..infrastructure.adapter.in.sqs..",
+                        "..infrastructure.adapter.sqs..")
                 .should().dependOnClassesThat().resideInAnyPackage("software.amazon.awssdk..")
-                .because("ADR-034 confines AWS SDK types to DynamoDB and SQS adapters");
+                .because("ADR-034 confines AWS SDK types to DynamoDB and SQS adapters "
+                        + "(SQS: publisher, consumers and their shared client and wire format)");
     }
 
     static ArchRule paymentAdapterTypesDoNotLeak() {
