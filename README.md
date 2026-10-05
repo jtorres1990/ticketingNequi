@@ -1,0 +1,71 @@
+# Ticketing Event Processing Platform
+
+Reactive ticketing backend (Java 25, Spring Boot 4, WebFlux) on DynamoDB and SQS, with an independent Payment Mock and a local environment on Docker Compose.
+
+| Folder | Content |
+|---|---|
+| `ticketing/` | Backend (Maven multi-module: `domain`, `application`, `infrastructure`, `bootstrap`). One jar, two roles: `api` and `worker`. |
+| `payment-mock/` | Independent Payment Mock (own Maven build), contract `payment-mock.openapi.v1.yaml`. |
+| `platform/` | `infra-init` (table, indexes, queues), `local-idp` (local OIDC issuer with the five test identities) and verification scripts. |
+| `docker-compose.yml` | DynamoDB Local, LocalStack (SQS), `infra-init`, `local-idp` and `payment-mock`. |
+
+## Requirements
+
+- JDK 25 (`JAVA_HOME` set, or `java` on `PATH`)
+- Docker with Compose v2
+- `sh` and `curl` (Git Bash on Windows)
+
+## Run locally
+
+```sh
+cp .env.example .env
+# Set PAYMENT_MOCK_API_KEY to any value. If port 8090 is busy, set PAYMENT_MOCK_HOST_PORT (e.g. 18090).
+
+./run-local.sh start   # starts Compose, builds the jar if missing, starts api (:8080) and worker (:8082)
+./run-local.sh smoke   # creates an Event, buys a Ticket and waits until the Order is CONFIRMED
+./run-local.sh stop    # stops api and worker
+./run-local.sh down    # also removes the Compose environment (data is ephemeral)
+```
+
+Logs are written to `.run/api.log` and `.run/worker.log`.
+
+### Calling the API by hand
+
+```sh
+# Access token for one of the identities: admin, customer-a, customer-b, admin-customer, no-groups
+curl -s -X POST http://localhost:9000/token -d identity=admin
+
+curl -s -X POST http://localhost:8080/api/v1/events \
+  -H "Authorization: Bearer <admin token>" -H "Content-Type: application/json" \
+  -H "Idempotency-Key: my-event-0001-abcd" \
+  -d '{"name":"Concert","venue":"Arena","startsAt":"2027-01-01T20:00:00Z","capacity":10,
+       "inventory":{"sections":[{"code":"A","rows":[{"label":"1","seats":10}]}]}}'
+```
+
+Operations (contract in `ticketing/infrastructure/src/test/resources/contracts/ticketing.openapi.v2.yaml`):
+
+| Method and path | Role |
+|---|---|
+| `POST /api/v1/events` | ADMIN |
+| `GET /api/v1/events/{eventId}/provisioning` | ADMIN |
+| `GET /api/v1/events` | ADMIN or CUSTOMER |
+| `GET /api/v1/events/{eventId}/availability` | ADMIN or CUSTOMER |
+| `POST /api/v1/orders` (`Idempotency-Key` header) | CUSTOMER |
+| `GET /api/v1/orders/{orderId}` | owner CUSTOMER |
+
+Health: `GET :8080/readyz`, `GET :8080/livez`. Metrics on the management port: `GET :8081/actuator/prometheus`.
+
+## Build and tests
+
+```sh
+cd ticketing
+./mvnw verify                  # unit, architecture, blocking detector and 90 % coverage gate (no Docker)
+./mvnw verify -Pintegration    # adds the integration tests against DynamoDB Local and LocalStack (Docker)
+
+cd ../payment-mock
+./mvnw verify
+```
+
+## Configuration
+
+The backend reads its configuration from environment variables (`TICKETING_ROLE=api|worker`, `TICKETING_DYNAMODB_TABLE`, `TICKETING_SQS_*_QUEUE_URL`, `TICKETING_SECURITY_*`, `TICKETING_PAYMENT_*`, …). `run-local.sh` shows the complete local set. AWS credentials are read through the standard SDK chain; the values in `.env.example` are fictitious and only valid against the local emulators.

@@ -3,3 +3,6 @@
 .env
 .env.*
 !.env.example
+
+# Local run output of run-local.sh (logs and pids).
+.run/
