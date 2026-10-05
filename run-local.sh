@@ -109,7 +109,7 @@ smoke() {
   while :; do
     body=$(curl -fs "$API_URL/api/v1/orders/$order_id" -H "Authorization: Bearer $customer")
     status=$(echo "$body" | json_field status)
-    case "$status" in CONFIRMED|FAILED|EXPIRED) break ;; esac
+    case "$status" in CONFIRMED|REJECTED|FAILED|EXPIRED) break ;; esac
     i=$((i + 1)); [ $i -gt 60 ] && break; sleep 1
   done
   echo "   $body"
