@@ -15,6 +15,8 @@ Reactive ticketing backend (Java 25, Spring Boot 4, WebFlux) on DynamoDB and SQS
 - Docker with Compose v2
 - `sh` and `curl` (Git Bash on Windows)
 
+On Windows, clone into a short folder (the longest tracked path has 141 characters) or enable long paths first: `git config --global core.longpaths true`.
+
 ## Run locally
 
 ```sh
@@ -30,7 +32,7 @@ docker compose up -d --wait     # builds the ticketing image (runs the unit test
 docker compose down -v          # stops and removes everything (data is ephemeral)
 ```
 
-The api is published on `127.0.0.1:8080` (API) and `127.0.0.1:8081` (management); the worker publishes no ports.
+The api is published on `127.0.0.1:8080` (API) and `127.0.0.1:8081` (management); the worker publishes no ports. The first `up` builds the images (about 2 minutes); later starts take about 30 seconds. Check the running environment with `sh platform/verify/environment.sh` (exit code = number of failed checks).
 
 ### Option B: api and worker as local JVMs (development)
 
