@@ -36,7 +36,21 @@
         <jacoco.version>0.8.15</jacoco.version>
         <coverage.minimum>0.90</coverage.minimum>
         <jacocoArgLine/>
+        <!-- Official AWS SDK for Java v2 (ADR-039); verified with Java 25 in SPK-007. -->
+        <aws-sdk.version>2.55.11</aws-sdk.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <build>
         <pluginManagement>
