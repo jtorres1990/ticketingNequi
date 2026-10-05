@@ -100,7 +100,11 @@ class WebApiConfigurationTest {
         claims.put("azp", "custom-client");
         claims.put("username", "custom-subject");
 
-        StepVerifier.create(Mono.defer(() -> decoder.decode(issuer.token(claims)))
+        // Tokens are signed before the reactive pipeline: RSA signing may read the platform entropy source
+        // (/dev/urandom on Linux), a blocking call that must not run on a non-blocking thread.
+        String customToken = issuer.token(claims);
+        String standardToken = issuer.token(TestTokenIssuer.CUSTOMER_A);
+        StepVerifier.create(Mono.defer(() -> decoder.decode(customToken))
                         .flatMap(jwt -> AccessTokens.authenticationConverter(settings).convert(jwt))
                         .subscribeOn(Schedulers.parallel()))
                 .assertNext(authentication -> {
@@ -108,7 +112,7 @@ class WebApiConfigurationTest {
                     assertThat(names(authentication.getAuthorities())).containsExactly("ADMIN");
                 })
                 .verifyComplete();
-        StepVerifier.create(Mono.defer(() -> decoder.decode(issuer.token(TestTokenIssuer.CUSTOMER_A)))
+        StepVerifier.create(Mono.defer(() -> decoder.decode(standardToken))
                         .subscribeOn(Schedulers.parallel()))
                 .expectError(JwtException.class)
                 .verify();

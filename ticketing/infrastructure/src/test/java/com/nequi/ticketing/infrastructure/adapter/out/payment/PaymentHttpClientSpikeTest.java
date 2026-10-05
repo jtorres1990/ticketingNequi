@@ -80,7 +80,8 @@ class PaymentHttpClientSpikeTest {
 
         long elapsed = Duration.ofNanos(System.nanoTime() - start).toMillis();
         assertThat(elapsed).isBetween(250L, 1_500L);
-        assertThat(thread.get()).startsWith("reactor-http-nio");
+        // Any Reactor Netty event loop: NIO on Windows and macOS, epoll on Linux.
+        assertThat(thread.get()).startsWith("reactor-http-");
     }
 
     @Test

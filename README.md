@@ -21,7 +21,7 @@ Reactive ticketing backend (Java 25, Spring Boot 4, WebFlux) on DynamoDB and SQS
 cp .env.example .env
 # Set PAYMENT_MOCK_API_KEY to any value. If port 8090 is busy, set PAYMENT_MOCK_HOST_PORT (e.g. 18090).
 
-./run-local.sh start   # starts Compose, builds the jar if missing, starts api (:8080) and worker (:8082)
+./run-local.sh start   # starts the Compose dependencies, builds the jar if missing, starts api (:8080) and worker (:8082) as local JVMs
 ./run-local.sh smoke   # creates an Event, buys a Ticket and waits until the Order is CONFIRMED
 ./run-local.sh stop    # stops api and worker
 ./run-local.sh down    # also removes the Compose environment (data is ephemeral)

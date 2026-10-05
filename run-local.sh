@@ -3,7 +3,7 @@
 # Docker Compose environment (DynamoDB Local, LocalStack, local-idp, payment-mock).
 #
 # Usage (from the repository root, Git Bash / Linux / macOS):
-#   ./run-local.sh start    # compose up + build jar if missing + start api and worker
+#   ./run-local.sh start    # compose up of the dependencies + build jar if missing + start api and worker
 #   ./run-local.sh smoke    # create an Event, buy a Ticket and wait for CONFIRMED
 #   ./run-local.sh stop     # stop api and worker (compose stays up)
 #   ./run-local.sh down     # stop api and worker and remove the compose environment
@@ -15,6 +15,7 @@ set -eu
 ROOT=$(cd "$(dirname "$0")" && pwd)
 RUN_DIR="$ROOT/.run"
 JAR="$ROOT/ticketing/bootstrap/target/ticketing-bootstrap-0.1.0-SNAPSHOT.jar"
+DEPENDENCIES="dynamodb-local localstack infra-init local-idp payment-mock"
 
 [ -f "$ROOT/.env" ] || { echo "Missing .env: cp .env.example .env and adjust it" >&2; exit 1; }
 set -a; . "$ROOT/.env"; set +a
@@ -118,7 +119,8 @@ smoke() {
 case "${1:-}" in
   start)
     mkdir -p "$RUN_DIR"
-    docker compose -f "$ROOT/docker-compose.yml" --env-file "$ROOT/.env" up -d --wait
+    # Only the dependencies: api and worker run here as local JVMs, never as Compose services (PLAT-IV-015).
+    docker compose -f "$ROOT/docker-compose.yml" --env-file "$ROOT/.env" up -d --wait $DEPENDENCIES
     if [ ! -f "$JAR" ]; then (cd "$ROOT/ticketing" && sh ./mvnw -B -q -DskipTests package); fi
     stop_roles
     start_role api "${API_PORT:-8080}" "${API_MANAGEMENT_PORT:-8081}"

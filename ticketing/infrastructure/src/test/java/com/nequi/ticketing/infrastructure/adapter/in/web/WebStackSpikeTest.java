@@ -284,7 +284,8 @@ class WebStackSpikeTest {
                     .map(index -> DefaultDataBufferFactory.sharedInstance.wrap(new byte[8 * 1024]));
             client.post().uri("/body").body(chunked, org.springframework.core.io.buffer.DataBuffer.class).exchange()
                     .expectStatus().isEqualTo(HttpStatus.CONTENT_TOO_LARGE);
-            assertThat(handlerThread.get()).startsWith("reactor-http-nio");
+            // Any Reactor Netty event loop: NIO on Windows and macOS, epoll on Linux.
+            assertThat(handlerThread.get()).startsWith("reactor-http-");
             String text = "a".repeat(LIMIT);
             client.post().uri("/codec").contentType(MediaType.TEXT_PLAIN).bodyValue(text).exchange()
                     .expectStatus().isOk().expectBody(String.class).isEqualTo(String.valueOf(text.getBytes(StandardCharsets.UTF_8).length));
