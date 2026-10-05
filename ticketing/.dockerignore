@@ -1,0 +1,8 @@
+# Build context of the ticketing image (PLAT-INC-005): allow-list of what the Maven build needs.
+# Everything else (target/, IDE files, logs, .git, any .env or secret) stays out of the context.
+*
+!.mvn/
+!mvnw
+!pom.xml
+!*/pom.xml
+!*/src/
