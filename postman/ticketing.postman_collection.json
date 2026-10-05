@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "d00d1185-b03b-429e-969c-a0824158ff9b",
+    "_postman_id": "922df760-68b0-43de-a386-9cc242962eaf",
     "name": "Ticketing Event Processing Platform",
     "description": "Colección de la API de Ticketing (contrato ticketing.openapi.v2.yaml) contra el entorno local.\n\n1. Levantar el entorno: `./run-local.sh start`.\n2. Importar esta colección y el environment `ticketing-local.postman_environment.json`.\n3. Ajustar `paymentMockUrl` y `paymentMockApiKey` según tu `.env`.\n4. Ejecutar las carpetas en orden (Collection Runner): autenticación, eventos, catálogo, compra y errores.\n\nLos IDs de evento y Order, las claves de idempotencia y los tokens se guardan en variables de la colección.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -682,8 +682,8 @@
                   "} else {",
                   "  pm.collectionVariables.set('orderPolls', 0);",
                   "  pm.test('Order en estado final', () => pm.expect(body.status).to.be.oneOf([\"CONFIRMED\", \"FAILED\", \"EXPIRED\"]));",
-                  "}",
-                  "pm.test('Order CONFIRMED', () => pm.expect(pm.response.json().status).to.eql('CONFIRMED'));"
+                  "  pm.test('Order CONFIRMED', () => pm.expect(body.status).to.eql('CONFIRMED'));",
+                  "}"
                 ]
               }
             }

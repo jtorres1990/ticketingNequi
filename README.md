@@ -7,7 +7,7 @@ Reactive ticketing backend (Java 25, Spring Boot 4, WebFlux) on DynamoDB and SQS
 | `ticketing/` | Backend (Maven multi-module: `domain`, `application`, `infrastructure`, `bootstrap`). One jar, two roles: `api` and `worker`. |
 | `payment-mock/` | Independent Payment Mock (own Maven build), contract `payment-mock.openapi.v1.yaml`. |
 | `platform/` | `infra-init` (table, indexes, queues), `local-idp` (local OIDC issuer with the five test identities) and verification scripts. |
-| `docker-compose.yml` | DynamoDB Local, LocalStack (SQS), `infra-init`, `local-idp` and `payment-mock`. |
+| `docker-compose.yml` | DynamoDB Local, LocalStack (SQS), `infra-init`, `local-idp`, `payment-mock`, `ticketing-api` and `ticketing-worker` (same image, role by `TICKETING_ROLE`). Profile `load`: `load-token-generator` and `load-test`. |
 
 ## Requirements
 
@@ -19,8 +19,24 @@ Reactive ticketing backend (Java 25, Spring Boot 4, WebFlux) on DynamoDB and SQS
 
 ```sh
 cp .env.example .env
-# Set PAYMENT_MOCK_API_KEY to any value. If port 8090 is busy, set PAYMENT_MOCK_HOST_PORT (e.g. 18090).
+# Set PAYMENT_MOCK_API_KEY to any value. If a host port is busy, change its *_HOST_PORT
+# (e.g. PAYMENT_MOCK_HOST_PORT=18090, TICKETING_API_HOST_PORT, TICKETING_API_MANAGEMENT_HOST_PORT).
+```
 
+### Option A: everything in Docker Compose
+
+```sh
+docker compose up -d --wait     # builds the ticketing image (runs the unit test suite) and starts all services
+docker compose down -v          # stops and removes everything (data is ephemeral)
+```
+
+The api is published on `127.0.0.1:8080` (API) and `127.0.0.1:8081` (management); the worker publishes no ports.
+
+### Option B: api and worker as local JVMs (development)
+
+`run-local.sh` starts only the Compose dependencies and runs the `api` and `worker` roles as local Java processes. Do not use it while option A is running: both use ports 8080 and 8081.
+
+```sh
 ./run-local.sh start   # starts the Compose dependencies, builds the jar if missing, starts api (:8080) and worker (:8082) as local JVMs
 ./run-local.sh smoke   # creates an Event, buys a Ticket and waits until the Order is CONFIRMED
 ./run-local.sh stop    # stops api and worker

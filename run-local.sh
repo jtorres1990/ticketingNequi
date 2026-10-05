@@ -121,6 +121,17 @@ case "${1:-}" in
     mkdir -p "$RUN_DIR"
     # Only the dependencies: api and worker run here as local JVMs, never as Compose services (PLAT-IV-015).
     docker compose -f "$ROOT/docker-compose.yml" --env-file "$ROOT/.env" up -d --wait $DEPENDENCIES
+    # up --wait does not wait for the one-shot infra-init; the table and queues must exist before the JVMs start.
+    i=0
+    while :; do
+      state=$(docker compose -f "$ROOT/docker-compose.yml" --env-file "$ROOT/.env" ps -a --format '{{.State}} {{.ExitCode}}' infra-init)
+      case "$state" in
+        "exited 0") break ;;
+        exited*) echo "infra-init failed ($state); see: docker compose logs infra-init" >&2; exit 1 ;;
+      esac
+      i=$((i + 1)); [ $i -gt 120 ] && { echo "infra-init did not finish" >&2; exit 1; }
+      sleep 1
+    done
     if [ ! -f "$JAR" ]; then (cd "$ROOT/ticketing" && sh ./mvnw -B -q -DskipTests package); fi
     stop_roles
     start_role api "${API_PORT:-8080}" "${API_MANAGEMENT_PORT:-8081}"
