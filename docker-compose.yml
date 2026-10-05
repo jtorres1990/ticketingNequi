@@ -1,6 +1,10 @@
 # Ticketing Event Processing Platform - local topology (ADR-036).
 # Services are added per platform increment (PLAT-INC-002 .. PLAT-INC-006).
 #
+# Default topology ("docker compose up"): dynamodb-local, localstack, local-idp, payment-mock,
+# infra-init (one-shot), ticketing-api and ticketing-worker. Profile "load" adds
+# load-token-generator and load-test; it never starts by default.
+#
 # Rules: never use container_name (the project name scopes containers, networks and
 # volumes); host ports bound to 127.0.0.1 only (PLAT-IV-008); emulator data is
 # ephemeral (no data volumes); external images pinned by tag and digest.
@@ -17,6 +21,39 @@ x-resource-names: &resource-names
   ORDERS_DLQ_NAME: ${ORDERS_DLQ_NAME:-ticketing-orders-dlq}
   PROVISIONING_QUEUE_NAME: ${PROVISIONING_QUEUE_NAME:-ticketing-event-provisioning}
   PROVISIONING_DLQ_NAME: ${PROVISIONING_DLQ_NAME:-ticketing-event-provisioning-dlq}
+
+# --- ticketing: ONE image, two roles selected only by TICKETING_ROLE (ADR-034, ADR-036, INC-010 6.5).
+#     Variable names are the literal ones of the backend handoff (INC-010 6.5.3).
+x-ticketing-common-env: &ticketing-common-env
+  <<: *aws-local-credentials
+  TICKETING_DYNAMODB_TABLE: ${TICKETING_TABLE_NAME:-ticketing}
+  TICKETING_DYNAMODB_ENDPOINT: http://dynamodb-local:8000
+  TICKETING_SQS_ENDPOINT: http://localstack:4566
+  # Deterministic LocalStack queue URLs (SQS_ENDPOINT_STRATEGY=path, account 000000000000).
+  TICKETING_SQS_ORDERS_QUEUE_URL: http://localstack:4566/queue/${AWS_REGION:?set AWS_REGION in .env (see .env.example)}/000000000000/${ORDERS_QUEUE_NAME:-ticketing-orders}
+  TICKETING_SQS_PROVISIONING_QUEUE_URL: http://localstack:4566/queue/${AWS_REGION:?set AWS_REGION in .env (see .env.example)}/000000000000/${PROVISIONING_QUEUE_NAME:-ticketing-event-provisioning}
+
+x-ticketing-app: &ticketing-app
+  image: ticketing-platform/ticketing:local
+  # Never pulled from a registry: built locally from ./ticketing by the ticketing-api service.
+  pull_policy: never
+  restart: "no"
+  networks: [ticketing-net]
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  mem_limit: 768m
+  # Graceful shutdown: at most 35 s per phase in the application (IV-004) + margin (PLAT-IV-012).
+  stop_grace_period: 40s
+  healthcheck:
+    # GET :8080/readyz -> 200 in both roles (INC-010 6.5.4). JDK probe compiled in the image build.
+    test: ["CMD", "java", "-XX:TieredStopAtLevel=1", "-XX:+UseSerialGC", "-Xmx16m", "-cp", "/opt/probe", "HealthProbe", "http://localhost:8080/readyz"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 30s
+    start_interval: 1s
 
 services:
 
@@ -166,6 +203,46 @@ services:
       start_period: 20s
       start_interval: 1s
 
+  # --- ticketing, role api: public API on 8080 (/api/v1); management 8081 published only
+  #     locally, bound to 127.0.0.1 (ADR-032, IV-004). Starts after infra-init and local-idp.
+  ticketing-api:
+    <<: *ticketing-app
+    build:
+      context: ./ticketing
+    environment:
+      <<: *ticketing-common-env
+      TICKETING_ROLE: api
+      # The issuer must equal the token "iss" fixed by local-idp; JWKS by the network URL.
+      TICKETING_SECURITY_ISSUER: ${LOCAL_IDP_ISSUER:-http://local-idp:9000}
+      TICKETING_SECURITY_JWK_SET_URI: http://local-idp:9000/.well-known/jwks.json
+      TICKETING_SECURITY_ALLOWED_CLIENT_IDS: ${LOCAL_IDP_CLIENT_ID:-ticketing-local-client}
+    ports:
+      - "127.0.0.1:${TICKETING_API_HOST_PORT:-8080}:8080"
+      - "127.0.0.1:${TICKETING_API_MANAGEMENT_HOST_PORT:-8081}:8081"
+    depends_on:
+      infra-init:
+        condition: service_completed_successfully
+      local-idp:
+        condition: service_healthy
+
+  # --- ticketing, role worker: same image as ticketing-api; no port published to the host.
+  #     Starts after infra-init and payment-mock.
+  ticketing-worker:
+    <<: *ticketing-app
+    environment:
+      <<: *ticketing-common-env
+      TICKETING_ROLE: worker
+      TICKETING_PAYMENT_BASE_URL: http://payment-mock:8090
+      # Secret: same untracked .env value that feeds payment-mock (ADR-032).
+      TICKETING_PAYMENT_API_KEY: ${PAYMENT_MOCK_API_KEY:?set PAYMENT_MOCK_API_KEY in .env (see .env.example)}
+      # Optional: empty = "worker-<random>" per process (unique lease owner even when scaled).
+      TICKETING_WORKER_ID: ${TICKETING_WORKER_ID:-}
+    depends_on:
+      infra-init:
+        condition: service_completed_successfully
+      payment-mock:
+        condition: service_healthy
+
   # --- Load profile: pre-generates > 1.000 distinct CUSTOMER tokens (ADR-033, ADR-036, PLAT-IV-009 a).
   #     Output in the ephemeral volume load-tokens: /tokens/customer-tokens.csv and /tokens/manifest.json.
   load-token-generator:
@@ -185,6 +262,38 @@ services:
     depends_on:
       local-idp:
         condition: service_healthy
+    networks: [ticketing-net]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  # --- Load profile: integration point of the QA load harness (ADR-036, PLAT-IV-010 a).
+  #     PROVISIONAL: the QA tool, image, scripts and thresholds are not delivered yet, so this
+  #     service fails on purpose and never simulates a test. QA replaces image and command.
+  #     Mounts: the token batch (read only). The QA folder is mounted when QA delivers it
+  #     ("./load-tests:/load-tests:ro"): Docker Desktop creates a missing bind source even with
+  #     create_host_path: false, so it is not declared before the folder exists.
+  load-test:
+    profiles: [load]
+    image: ticketing-platform/infra-init:local
+    pull_policy: never
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        echo 'load-test: the QA load harness (load-tests/) has not been delivered yet;
+        nothing was executed (PLAT-IV-010).' >&2; exit 1
+    restart: "no"
+    volumes:
+      - type: volume
+        source: load-tokens
+        target: /tokens
+        read_only: true
+    depends_on:
+      ticketing-api:
+        condition: service_healthy
+      load-token-generator:
+        condition: service_completed_successfully
     networks: [ticketing-net]
     read_only: true
     tmpfs: [/tmp]
