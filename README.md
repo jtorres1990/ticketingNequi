@@ -53,6 +53,15 @@ Operations (contract in `ticketing/infrastructure/src/test/resources/contracts/t
 | `POST /api/v1/orders` (`Idempotency-Key` header) | CUSTOMER |
 | `GET /api/v1/orders/{orderId}` | owner CUSTOMER |
 
+### Postman collection
+
+`postman/ticketing.postman_collection.json` and the environment `postman/ticketing-local.postman_environment.json` cover tokens for the five identities, Event creation and provisioning, catalog and availability, purchase with idempotent replay, Order polling until `CONFIRMED`, error cases (401, 403, 400, 404, 409, 422) and the Payment Mock control API. Set `paymentMockUrl` and `paymentMockApiKey` to the values of your `.env` and run the folders in order with the Collection Runner. From the command line:
+
+```sh
+npx newman run postman/ticketing.postman_collection.json -e postman/ticketing-local.postman_environment.json \
+  --env-var paymentMockUrl=http://localhost:18090 --env-var paymentMockApiKey=<PAYMENT_MOCK_API_KEY>
+```
+
 Health: `GET :8080/readyz`, `GET :8080/livez`. Metrics on the management port: `GET :8081/actuator/prometheus`.
 
 ## Build and tests

@@ -1,0 +1,1418 @@
+{
+  "info": {
+    "_postman_id": "d00d1185-b03b-429e-969c-a0824158ff9b",
+    "name": "Ticketing Event Processing Platform",
+    "description": "Colección de la API de Ticketing (contrato ticketing.openapi.v2.yaml) contra el entorno local.\n\n1. Levantar el entorno: `./run-local.sh start`.\n2. Importar esta colección y el environment `ticketing-local.postman_environment.json`.\n3. Ajustar `paymentMockUrl` y `paymentMockApiKey` según tu `.env`.\n4. Ejecutar las carpetas en orden (Collection Runner): autenticación, eventos, catálogo, compra y errores.\n\nLos IDs de evento y Order, las claves de idempotencia y los tokens se guardan en variables de la colección.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Autenticación (local-idp)",
+      "description": "Obtiene tokens de las cinco identidades de ADR-033 y los guarda en variables de la colección. Ejecutar primero.",
+      "item": [
+        {
+          "name": "Token admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "identity",
+                  "value": "admin",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{idpUrl}}/token",
+              "host": [
+                "{{idpUrl}}"
+              ],
+              "path": [
+                "token"
+              ]
+            },
+            "description": "Access token RS256 de la identidad `admin` emitido por local-idp (ADR-033)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 token emitido', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adminToken', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token customer-a",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "identity",
+                  "value": "customer-a",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{idpUrl}}/token",
+              "host": [
+                "{{idpUrl}}"
+              ],
+              "path": [
+                "token"
+              ]
+            },
+            "description": "Access token RS256 de la identidad `customer-a` emitido por local-idp (ADR-033)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 token emitido', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('customerAToken', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token customer-b",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "identity",
+                  "value": "customer-b",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{idpUrl}}/token",
+              "host": [
+                "{{idpUrl}}"
+              ],
+              "path": [
+                "token"
+              ]
+            },
+            "description": "Access token RS256 de la identidad `customer-b` emitido por local-idp (ADR-033)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 token emitido', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('customerBToken', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token admin-customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "identity",
+                  "value": "admin-customer",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{idpUrl}}/token",
+              "host": [
+                "{{idpUrl}}"
+              ],
+              "path": [
+                "token"
+              ]
+            },
+            "description": "Access token RS256 de la identidad `admin-customer` emitido por local-idp (ADR-033)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 token emitido', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adminCustomerToken', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Token no-groups",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "identity",
+                  "value": "no-groups",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{idpUrl}}/token",
+              "host": [
+                "{{idpUrl}}"
+              ],
+              "path": [
+                "token"
+              ]
+            },
+            "description": "Access token RS256 de la identidad `no-groups` emitido por local-idp (ADR-033)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 token emitido', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('noGroupsToken', pm.response.json().access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Eventos (ADMIN)",
+      "item": [
+        {
+          "name": "Crear evento",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{eventIdempotencyKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "description": "API-001. Crea el Event en PROVISIONING y encola su aprovisionamiento. 202 con Location.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Concierto de demostraci\\u00f3n\",\n  \"venue\": \"Arena local\",\n  \"startsAt\": \"{{eventStartsAt}}\",\n  \"capacity\": 22,\n  \"inventory\": {\n    \"sections\": [\n      {\n        \"code\": \"A\",\n        \"rows\": [\n          {\n            \"label\": \"1\",\n            \"seats\": 10\n          },\n          {\n            \"label\": \"2\",\n            \"seats\": 10\n          }\n        ]\n      },\n      {\n        \"code\": \"VIP\",\n        \"rows\": [\n          {\n            \"label\": \"1\",\n            \"seats\": 2\n          }\n        ]\n      }\n    ],\n    \"complimentary\": [\n      {\n        \"section\": \"VIP\",\n        \"row\": \"1\",\n        \"fromSeat\": 1,\n        \"toSeat\": 2\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('eventIdempotencyKey', 'evt-' + pm.variables.replaceIn('{{$guid}}'));",
+                  "const d = new Date(Date.now() + 30 * 24 * 3600 * 1000);",
+                  "pm.collectionVariables.set('eventStartsAt', d.toISOString().replace(/\\.\\d{3}Z$/, 'Z'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 aceptado'.trim(), () => pm.response.to.have.status(202));",
+                  "pm.test('Location presente', () => pm.response.to.have.header('Location'));",
+                  "pm.collectionVariables.set('eventId', pm.response.json().eventId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Crear evento - repetición idempotente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{eventIdempotencyKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "description": "Misma Idempotency-Key y mismo contenido: 200 con Idempotency-Replayed: true y el mismo eventId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Concierto de demostraci\\u00f3n\",\n  \"venue\": \"Arena local\",\n  \"startsAt\": \"{{eventStartsAt}}\",\n  \"capacity\": 22,\n  \"inventory\": {\n    \"sections\": [\n      {\n        \"code\": \"A\",\n        \"rows\": [\n          {\n            \"label\": \"1\",\n            \"seats\": 10\n          },\n          {\n            \"label\": \"2\",\n            \"seats\": 10\n          }\n        ]\n      },\n      {\n        \"code\": \"VIP\",\n        \"rows\": [\n          {\n            \"label\": \"1\",\n            \"seats\": 2\n          }\n        ]\n      }\n    ],\n    \"complimentary\": [\n      {\n        \"section\": \"VIP\",\n        \"row\": \"1\",\n        \"fromSeat\": 1,\n        \"toSeat\": 2\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 repetición'.trim(), () => pm.response.to.have.status(200));",
+                  "pm.test('Idempotency-Replayed: true', () => pm.expect(pm.response.headers.get('Idempotency-Replayed')).to.eql('true'));",
+                  "pm.test('mismo eventId', () => pm.expect(pm.response.json().eventId).to.eql(pm.collectionVariables.get('eventId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Estado de aprovisionamiento (espera ENABLED)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}/provisioning",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}",
+                "provisioning"
+              ]
+            },
+            "description": "API-002. Repite la consulta hasta ENABLED o FAILED (máximo 30 intentos en el Runner)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const done = [\"ENABLED\"].includes(body.provisioningStatus);",
+                  "const n = Number(pm.collectionVariables.get('provisioningPolls') || 0);",
+                  "if (!done && n < 30) {",
+                  "  pm.collectionVariables.set('provisioningPolls', n + 1);",
+                  "  setTimeout(() => {}, 1000);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "  pm.collectionVariables.set('provisioningPolls', 0);",
+                  "  pm.test('Event ENABLED', () => pm.expect(body.provisioningStatus).to.be.oneOf([\"ENABLED\"]));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Catálogo (ADMIN o CUSTOMER)",
+      "item": [
+        {
+          "name": "Listar eventos futuros",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events?limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "API-003. Events ENABLED futuros ordenados por fecha; incluye soldOut."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));",
+                  "pm.test('incluye el evento creado', () => pm.expect(JSON.stringify(pm.response.json())).to.include(pm.collectionVariables.get('eventId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disponibilidad del evento",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}/availability?pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "API-004. Recuento de Tickets AVAILABLE y una página de Tickets."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disponibilidad filtrada por sección",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}/availability?section=A&pageSize=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "section",
+                  "value": "A"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "5"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Compra y Order (CUSTOMER)",
+      "item": [
+        {
+          "name": "Iniciar compra",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{purchaseIdempotencyKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "API-005. Reserva atómica de 1 a 10 Tickets; crea la Order en CREATED. 201 con Location.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"ticketIds\": [\n    \"A-1-1\",\n    \"A-1-2\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('purchaseIdempotencyKey', 'ord-' + pm.variables.replaceIn('{{$guid}}'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 creada'.trim(), () => pm.response.to.have.status(201));",
+                  "pm.test('status CREATED', () => pm.expect(pm.response.json().status).to.eql('CREATED'));",
+                  "pm.collectionVariables.set('orderId', pm.response.json().orderId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Iniciar compra - repetición idempotente",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{purchaseIdempotencyKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"ticketIds\": [\n    \"A-1-1\",\n    \"A-1-2\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 repetición'.trim(), () => pm.response.to.have.status(200));",
+                  "pm.test('Idempotency-Replayed: true', () => pm.expect(pm.response.headers.get('Idempotency-Replayed')).to.eql('true'));",
+                  "pm.test('misma Order', () => pm.expect(pm.response.json().orderId).to.eql(pm.collectionVariables.get('orderId')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar Order (espera estado final)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}"
+              ]
+            },
+            "description": "API-006. Repite hasta CONFIRMED, FAILED o EXPIRED (máximo 30 intentos en el Runner)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const done = [\"CONFIRMED\", \"FAILED\", \"EXPIRED\"].includes(body.status);",
+                  "const n = Number(pm.collectionVariables.get('orderPolls') || 0);",
+                  "if (!done && n < 30) {",
+                  "  pm.collectionVariables.set('orderPolls', n + 1);",
+                  "  setTimeout(() => {}, 1000);",
+                  "  postman.setNextRequest(pm.info.requestName);",
+                  "} else {",
+                  "  pm.collectionVariables.set('orderPolls', 0);",
+                  "  pm.test('Order en estado final', () => pm.expect(body.status).to.be.oneOf([\"CONFIRMED\", \"FAILED\", \"EXPIRED\"]));",
+                  "}",
+                  "pm.test('Order CONFIRMED', () => pm.expect(pm.response.json().status).to.eql('CONFIRMED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Disponibilidad tras la venta",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/{{eventId}}/availability?section=A&pageSize=50",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "{{eventId}}",
+                "availability"
+              ],
+              "query": [
+                {
+                  "key": "section",
+                  "value": "A"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));",
+                  "pm.test('A-1-1 ya no está disponible', () => pm.expect(JSON.stringify(pm.response.json())).to.not.include('\"A-1-1\"'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Casos de error",
+      "item": [
+        {
+          "name": "Sin token → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 '.trim(), () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Identidad sin grupos → 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{noGroupsToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 '.trim(), () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "CUSTOMER crea evento → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "evt-forbidden-{{$timestamp}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Concierto de demostraci\\u00f3n\",\n  \"venue\": \"Arena local\",\n  \"startsAt\": \"{{eventStartsAt}}\",\n  \"capacity\": 22,\n  \"inventory\": {\n    \"sections\": [\n      {\n        \"code\": \"A\",\n        \"rows\": [\n          {\n            \"label\": \"1\",\n            \"seats\": 10\n          },\n          {\n            \"label\": \"2\",\n            \"seats\": 10\n          }\n        ]\n      },\n      {\n        \"code\": \"VIP\",\n        \"rows\": [\n          {\n            \"label\": \"1\",\n            \"seats\": 2\n          }\n        ]\n      }\n    ],\n    \"complimentary\": [\n      {\n        \"section\": \"VIP\",\n        \"row\": \"1\",\n        \"fromSeat\": 1,\n        \"toSeat\": 2\n      }\n    ]\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set('eventIdempotencyKey', 'evt-' + pm.variables.replaceIn('{{$guid}}'));",
+                  "const d = new Date(Date.now() + 30 * 24 * 3600 * 1000);",
+                  "pm.collectionVariables.set('eventStartsAt', d.toISOString().replace(/\\.\\d{3}Z$/, 'Z'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 '.trim(), () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra sin Idempotency-Key → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerBToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"ticketIds\": [\n    \"A-2-1\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 '.trim(), () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra con Ticket repetido → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerBToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "ord-dup-{{$timestamp}}-0001"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"ticketIds\": [\n    \"A-2-1\",\n    \"A-2-1\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 '.trim(), () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ticket ya vendido → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerBToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "ord-sold-{{$timestamp}}-0001"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "description": "A-1-1 lo compró customer-a: TICKETS_UNAVAILABLE con unavailableTicketIds.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"ticketIds\": [\n    \"A-1-1\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 '.trim(), () => pm.response.to.have.status(409));",
+                  "pm.test('Problem Details code TICKETS_UNAVAILABLE', () => pm.expect(pm.response.json().code).to.eql('TICKETS_UNAVAILABLE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ticket de cortesía → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerBToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "ord-comp-{{$timestamp}}-0001"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"ticketIds\": [\n    \"VIP-1-1\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 '.trim(), () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ticket inexistente → 422",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerBToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "ord-unk-{{$timestamp}}-0001"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"eventId\": \"{{eventId}}\",\n  \"ticketIds\": [\n    \"Z-9-9\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 '.trim(), () => pm.response.to.have.status(422));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Order de otro cliente → 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerBToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "orders",
+                "{{orderId}}"
+              ]
+            },
+            "description": "Una Order ajena responde igual que una inexistente (AC-027)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 '.trim(), () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Evento inexistente → 404",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{customerAToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/events/00000000-0000-4000-8000-000000000000/availability",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "events",
+                "00000000-0000-4000-8000-000000000000",
+                "availability"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 '.trim(), () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Payment Mock (control para demos)",
+      "description": "API de control del Payment Mock. Ejemplo: forzar rechazos con declinePercentage=100, comprar y ver la Order FAILED; después restablecer.",
+      "item": [
+        {
+          "name": "Salud",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{paymentMockUrl}}/health",
+              "host": [
+                "{{paymentMockUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rechazar todos los pagos",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{paymentMockApiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentMockUrl}}/control/defaults",
+              "host": [
+                "{{paymentMockUrl}}"
+              ],
+              "path": [
+                "control",
+                "defaults"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"defaultOutcome\": \"DECLINED\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Aprobar todos los pagos",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Api-Key",
+                "value": "{{paymentMockApiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentMockUrl}}/control/defaults",
+              "host": [
+                "{{paymentMockUrl}}"
+              ],
+              "path": [
+                "control",
+                "defaults"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"defaultOutcome\": \"APPROVED\",\n  \"declinePercentage\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Inspeccionar autorización de la última Order",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Api-Key",
+                "value": "{{paymentMockApiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentMockUrl}}/control/authorizations/{{orderId}}-1",
+              "host": [
+                "{{paymentMockUrl}}"
+              ],
+              "path": [
+                "control",
+                "authorizations",
+                "{{orderId}}-1"
+              ]
+            },
+            "description": "paymentAttemptId = <orderId>-1 (ADR-027)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 '.trim(), () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restablecer estado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Api-Key",
+                "value": "{{paymentMockApiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{paymentMockUrl}}/control/reset",
+              "host": [
+                "{{paymentMockUrl}}"
+              ],
+              "path": [
+                "control",
+                "reset"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 '.trim(), () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "customerAToken",
+      "value": ""
+    },
+    {
+      "key": "customerBToken",
+      "value": ""
+    },
+    {
+      "key": "adminCustomerToken",
+      "value": ""
+    },
+    {
+      "key": "noGroupsToken",
+      "value": ""
+    },
+    {
+      "key": "eventId",
+      "value": ""
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "eventIdempotencyKey",
+      "value": ""
+    },
+    {
+      "key": "purchaseIdempotencyKey",
+      "value": ""
+    },
+    {
+      "key": "eventStartsAt",
+      "value": ""
+    },
+    {
+      "key": "provisioningPolls",
+      "value": ""
+    },
+    {
+      "key": "orderPolls",
+      "value": ""
+    }
+  ]
+}
